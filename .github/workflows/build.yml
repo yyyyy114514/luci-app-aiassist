@@ -9,19 +9,20 @@ on:
 
 jobs:
   build:
-    name: ${{ matrix.arch }} (${{ matrix.branch }})
+    name: ${{ matrix.arch }} (OpenWrt ${{ matrix.branch }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        branch: [ '24.10' ]
+        # OpenWrt SDK container tags on ghcr.io/openwrt/sdk use the full <major>.<minor>.<patch>
+        # version, e.g. x86_64-24.10.0 (x86_64-24.10 does NOT exist).
+        # Only architectures that actually ship a 24.10.0 SDK image are listed.
+        branch: [ '24.10.0' ]
         arch:
-          - x86_64
-          - mips_24kc
-          - mips_4kc
-          - mips64_octeon
-          - arm_cortex-a7_neon-vfpv4
-          - aarch64_cortex-a53
+          - aarch64_cortex-a53   # ARMv8 (RK3328/3399, ipq807x, R2S/R4S ...)
+          - x86_64               # x86 soft-router
+          - mips_24kc            # MT7620/MT7621 and most MIPS home routers
+          - arm_cortex-a7_neon-vfpv4   # MT7623, ipq40xx ...
 
     steps:
       - uses: actions/checkout@v4
