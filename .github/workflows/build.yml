@@ -42,8 +42,14 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ipk-${{ matrix.arch }}-${{ matrix.branch }}
-          # custom feed (action) ipks land in bin/packages/<arch>/action/, official deps in .../packages/
-          path: bin/packages/${{ matrix.arch }}/*/*.ipk
+          # custom feed (action) carries the app itself; also ship the only extra
+          # runtime dependency family (curl) so offline install works
+          path: |
+            bin/packages/${{ matrix.arch }}/action/*.ipk
+            bin/packages/${{ matrix.arch }}/packages/curl_*.ipk
+            bin/packages/${{ matrix.arch }}/packages/libcurl4_*.ipk
+            bin/packages/${{ matrix.arch }}/packages/cgi-io_*.ipk
+            bin/packages/${{ matrix.arch }}/packages/libnghttp2-14_*.ipk
           if-no-files-found: error
           retention-days: 14
 
