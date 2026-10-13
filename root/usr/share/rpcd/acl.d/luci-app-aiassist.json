@@ -1,0 +1,45 @@
+{
+	"luci-app-aiassist": {
+		"description": "Grant access to LuCI AI Assistant procedures",
+		"read": {
+			"ubus": {
+				"aiassist": [
+					"getInfo",
+					"getSettings",
+					"listSessions",
+					"getSession",
+					"listJobs",
+					"pollJob",
+					"getSystemInfo",
+					"listSnapshots",
+					"snapshotDiff",
+					"getSnapshot",
+					"listMtd",
+					"listApiKeyState"
+				]
+			}
+		},
+		"write": {
+			"ubus": {
+				"aiassist": [
+					"createSession",
+					"deleteSession",
+					"renameSession",
+					"sendMessage",
+					"stopJob",
+					"compressContext",
+					"rollback",
+					"createSnapshot",
+					"backupMtd",
+					"testConnection",
+					"updateSettings",
+					"setApiKey",
+					"clearApiKey"
+				]
+			},
+			"file": {
+				"/etc/aiassist/*": [ "write" ]
+			}
+		}
+	}
+}

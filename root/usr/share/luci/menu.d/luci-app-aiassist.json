@@ -1,0 +1,30 @@
+{
+	"admin/system/aiassist": {
+		"title": "AI Assistant",
+		"order": 76,
+		"action": {
+			"type": "firstchild"
+		},
+		"depends": {
+			"acl": [ "luci-app-aiassist" ]
+		}
+	},
+
+	"admin/system/aiassist/chat": {
+		"title": "Chat",
+		"order": 10,
+		"action": {
+			"type": "view",
+			"path": "aiassist/chat"
+		}
+	},
+
+	"admin/system/aiassist/settings": {
+		"title": "Settings",
+		"order": 20,
+		"action": {
+			"type": "view",
+			"path": "aiassist/settings"
+		}
+	}
+}

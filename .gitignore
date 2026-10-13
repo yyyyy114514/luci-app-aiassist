@@ -1,0 +1,22 @@
+# Build artifacts
+*.ipk
+*.apk
+bin/
+logs/
+dl/
+build_dir/
+staging_dir/
+toolchain/
+
+# Local SDK dirs
+.openwrt/
+sdk/
+
+# Editor / OS
+*.swp
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.key
+*_key

@@ -1,0 +1,64 @@
+name: Build ipk
+
+on:
+  push:
+    branches: [ main, master ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.arch }} (${{ matrix.branch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [ 24.10 ]
+        arch:
+          - x86_64
+          - mips_24kc
+          - mips_4kc
+          - mips64_octeon
+          - arm_cortex-a7_neon-vfpv4
+          - aarch64_cortex-a53
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build ipk via OpenWrt SDK
+        uses: openwrt/gh-action-sdk@main
+        env:
+          ARCH: ${{ matrix.arch }}-${{ matrix.branch }}
+          PACKAGES: luci-app-aiassist
+          V: s
+          # BUILD_LOG: 1
+          # IGNORE_ERRORS: 1
+
+      - name: Store built ipk
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipk-${{ matrix.arch }}-${{ matrix.branch }}
+          path: bin/packages/${{ matrix.arch }}/packages/*.ipk
+          if-no-files-found: error
+          retention-days: 14
+
+  # On version tags, publish a consolidated release with every architecture
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*.ipk
+          generate_release_notes: true

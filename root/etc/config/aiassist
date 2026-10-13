@@ -1,0 +1,35 @@
+# AI Assistant configuration
+# provider: openai | anthropic
+# base_url: API base url, e.g. https://api.openai.com/v1 or https://api.anthropic.com
+#           (if it already ends with /chat/completions or /v1/messages it is used as-is)
+# api_key is stored separately in /etc/aiassist/api_key (chmod 600), NOT here.
+# permission: readonly | limited | full
+#   readonly - AI can only inspect configuration / system status, cannot run any command
+#   limited  - AI may run allow-listed commands only (see exec_allowlist below)
+#   full     - AI has full root powers, no per-command approval required.
+#              You MUST acknowledge the risk in the settings page first.
+# mtd_backup: 1 = enable highest-tier rollback support (mtd partition backup via dd)
+config aiassist 'settings'
+	option enabled '0'
+	option provider 'openai'
+	option base_url 'https://api.openai.com/v1'
+	option model 'gpt-4o-mini'
+	option permission 'readonly'
+	option full_risk_acknowledged '0'
+	option context_threshold '6000'
+	option max_turns '20'
+	option timeout '60'
+	option max_output '4096'
+	option max_tokens '2048'
+	option max_tool_rounds '6'
+	option exec_timeout '30'
+	option max_session_tokens '20000'
+	option api_retries '2'
+	option temperature '0.3'
+	option proxy ''
+	option auto_snapshot '1'
+	option mtd_backup '0'
+	option session_retention '50'
+	option system_prompt ''
+	option exec_allowlist ''
+	option view_paths ''

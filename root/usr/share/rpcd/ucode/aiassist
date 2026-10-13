@@ -1,0 +1,327 @@
+// LuCI AI Assistant - rpcd entry (ucode)
+// Path: /usr/share/rpcd/ucode/aiassist
+// Licensed under the Apache License 2.0.
+// Note: rpcd ucode plugin convention:
+//   args = map of parameter name -> default value; parameters arrive under request.args.<name>
+
+'use strict';
+
+import { writefile, popen } from 'fs';
+import { cursor } from 'uci';
+import {
+	load_config, api_key_status,
+	create_session, list_sessions, delete_session, rename_session, read_session,
+	get_system_info, list_mtd, backup_mtd, list_snapshots, snapshot_diff, get_snapshot_content,
+	rollback_session, create_snapshot, estimate_session_tokens, KEY_FILE
+} from 'aiassist.lib';
+import { submit_job, poll_job, stop_job } from 'aiassist.core';
+import { call_ai } from 'aiassist.proto';
+
+// ------------------------------------------------ helpers
+
+function clean_settings(cfg) {
+	let out = {
+		enabled: cfg.enabled,
+		provider: cfg.provider,
+		base_url: cfg.base_url,
+		model: cfg.model,
+		permission: cfg.permission,
+		full_risk_acknowledged: cfg.full_risk_acknowledged,
+		context_threshold: cfg.context_threshold,
+		max_turns: cfg.max_turns,
+		timeout: cfg.timeout,
+		max_output: cfg.max_output,
+		max_tokens: cfg.max_tokens,
+		max_tool_rounds: cfg.max_tool_rounds,
+		exec_timeout: cfg.exec_timeout,
+		max_session_tokens: cfg.max_session_tokens,
+		api_retries: cfg.api_retries,
+		temperature: cfg.temperature,
+		proxy: cfg.proxy,
+		auto_snapshot: cfg.auto_snapshot,
+		mtd_backup: cfg.mtd_backup,
+		system_prompt: cfg.system_prompt,
+		exec_allowlist: cfg.exec_allowlist,
+		view_paths: cfg.view_paths_str || ''
+	};
+	out.api_key = api_key_status(cfg);
+	out.exec_allow = cfg.exec_allow;
+	out.view_paths_effective = cfg.view_paths;
+	return out;
+}
+
+function trunc_text(t, max) {
+	t = '' + (t || '');
+	if (length(t) <= max)
+		return t;
+	return substr(t, 0, max);
+}
+
+// ------------------------------------------------ rpcd methods
+
+const methods = {
+
+	getInfo: {
+		call: function() {
+			let cfg = load_config();
+			return {
+				enabled: cfg.enabled,
+				permission: cfg.permission,
+				provider: cfg.provider,
+				model: cfg.model,
+				api_key: api_key_status(cfg),
+				mtd_backup: cfg.mtd_backup,
+				auto_snapshot: cfg.auto_snapshot,
+				full_risk_acknowledged: cfg.full_risk_acknowledged
+			};
+		}
+	},
+
+	getSettings: {
+		call: function() {
+			return clean_settings(load_config());
+		}
+	},
+
+	listSessions: {
+		call: function() {
+			return { sessions: list_sessions() };
+		}
+	},
+
+	getSession: {
+		args: { sid: '' },
+		call: function(request) {
+			let s = read_session(request.args.sid);
+			if (!s)
+				return { ok: false, reason: '会话不存在' };
+			return {
+				ok: true,
+				session: {
+					id: s.id,
+					title: s.title,
+					turn: s.turn,
+					created: s.created,
+					updated: s.updated,
+					messages: s.messages,
+					snapshots: s.snapshots,
+					estimated_tokens: estimate_session_tokens(s)
+				}
+			};
+		}
+	},
+
+	createSession: {
+		args: { title: '' },
+		call: function(request) {
+			let s = create_session(request.args.title || '');
+			return { ok: true, id: s.id, title: s.title };
+		}
+	},
+
+	deleteSession: {
+		args: { sid: '' },
+		call: function(request) {
+			delete_session(request.args.sid);
+			return { ok: true };
+		}
+	},
+
+	renameSession: {
+		args: { sid: '', title: '' },
+		call: function(request) {
+			return rename_session(request.args.sid, request.args.title);
+		}
+	},
+
+	sendMessage: {
+		args: { sid: '', content: '' },
+		call: function(request) {
+			let cfg = load_config();
+			if (!cfg.enabled)
+				return { ok: false, error: 'AI 助手未启用，请先在设置页开启' };
+			if (!length(trim(request.args.content)))
+				return { ok: false, error: '消息为空' };
+			if (length(request.args.content) > 8000)
+				return { ok: false, error: '消息过长（上限 8000 字符）' };
+
+			// fast hard-cap check before spawning a worker
+			let s = read_session(request.args.sid);
+			if (s) {
+				let cur = estimate_session_tokens(s);
+				let est = cur + int(length(request.args.content) * 1.5);
+				if (est > cfg.max_session_tokens)
+					return {
+						ok: false,
+						error: sprintf('会话上下文接近/超过硬上限（当前约 %d / %d tokens）。请先「压缩上下文」或新建会话。', cur, cfg.max_session_tokens)
+					};
+			}
+
+			return submit_job(request.args.sid, request.args.content, 'msg');
+		}
+	},
+
+	compressContext: {
+		args: { sid: '' },
+		call: function(request) {
+			return submit_job(request.args.sid, '', 'compress');
+		}
+	},
+
+	pollJob: {
+		args: { jobid: '' },
+		call: function(request) {
+			return poll_job(request.args.jobid);
+		}
+	},
+
+	stopJob: {
+		args: { jobid: '' },
+		call: function(request) {
+			return stop_job(request.args.jobid);
+		}
+	},
+
+	getSystemInfo: {
+		call: function() {
+			return get_system_info();
+		}
+	},
+
+	listSnapshots: {
+		args: { sid: '' },
+		call: function(request) {
+			return list_snapshots(request.args.sid);
+		}
+	},
+
+	snapshotDiff: {
+		args: { sid: '', turn: 0 },
+		call: function(request) {
+			return snapshot_diff(request.args.sid, request.args.turn);
+		}
+	},
+
+	getSnapshot: {
+		args: { sid: '', turn: 0 },
+		call: function(request) {
+			return get_snapshot_content(request.args.sid, request.args.turn);
+		}
+	},
+
+	createSnapshot: {
+		args: { sid: '', comment: '' },
+		call: function(request) {
+			return create_snapshot(request.args.sid, request.args.comment || 'manual');
+		}
+	},
+
+	rollback: {
+		args: { sid: '', turn: 0, confirm: 'no' },
+		call: function(request) {
+			return rollback_session(request.args.sid, request.args.turn, request.args.confirm);
+		}
+	},
+
+	listMtd: {
+		call: function() {
+			return list_mtd();
+		}
+	},
+
+	backupMtd: {
+		args: { device: 'all' },
+		call: function(request) {
+			let cfg = load_config();
+			if (cfg.permission != 'full' && !cfg.mtd_backup)
+				return { ok: false, text: 'MTD 备份需要 full 权限或在设置页启用 mtd_backup' };
+			return backup_mtd(request.args.device);
+		}
+	},
+
+	testConnection: {
+		call: function() {
+			let cfg = load_config();
+			if (!cfg.api_key || !length(cfg.api_key))
+				return { ok: false, error: '未配置 API Key' };
+			let resp = call_ai(cfg, [ { role: 'user', kind: 'text', content: '你好，请回复：连接正常。', ts: time(), turn: 0 } ], [], null);
+			if (resp.error)
+				return { ok: false, error: resp.error };
+			return { ok: true, reply: trunc_text(resp.text || '', 200) };
+		}
+	},
+
+	updateSettings: {
+		args: {
+			enabled: false, provider: '', base_url: '', model: '',
+			permission: '', context_threshold: 6000, max_turns: 20,
+			timeout: 60, max_output: 4096, temperature: 0.3,
+			proxy: '', auto_snapshot: true, mtd_backup: false,
+			system_prompt: '', exec_allowlist: '', view_paths: '',
+			acknowledge_full: false,
+			max_tokens: 2048, max_tool_rounds: 6, exec_timeout: 30,
+			max_session_tokens: 20000, api_retries: 2
+		},
+		call: function(request) {
+			let a = request.args;
+			let ctx = cursor();
+			let set = (k, v) => { if (a[k] !== null && a[k] !== undefined) ctx.set('aiassist', 'settings', k, '' + v); };
+
+			if (a.permission == 'full') {
+				let cfg = load_config();
+				let ack = cfg.full_risk_acknowledged || a.acknowledge_full === true;
+				if (!ack)
+					return { ok: false, error: '切换到 full（全权负责）权限必须先确认风险（勾选确认框）' };
+				ctx.set('aiassist', 'settings', 'full_risk_acknowledged', '1');
+				ctx.set('aiassist', 'settings', 'permission', 'full');
+			}
+			else {
+				ctx.set('aiassist', 'settings', 'permission', a.permission || 'readonly');
+			}
+
+			set('enabled', a.enabled);
+			set('provider', a.provider);
+			set('base_url', a.base_url);
+			set('model', a.model);
+			set('context_threshold', a.context_threshold);
+			set('max_turns', a.max_turns);
+			set('timeout', a.timeout);
+			set('max_output', a.max_output);
+			set('temperature', a.temperature);
+			set('proxy', a.proxy);
+			set('auto_snapshot', a.auto_snapshot);
+			set('mtd_backup', a.mtd_backup);
+			set('system_prompt', a.system_prompt);
+			set('exec_allowlist', a.exec_allowlist);
+			set('view_paths', a.view_paths);
+			set('max_tokens', a.max_tokens);
+			set('max_tool_rounds', a.max_tool_rounds);
+			set('exec_timeout', a.exec_timeout);
+			set('max_session_tokens', a.max_session_tokens);
+			set('api_retries', a.api_retries);
+
+			ctx.commit('aiassist');
+			return { ok: true };
+		}
+	},
+
+	setApiKey: {
+		args: { key: '' },
+		call: function(request) {
+			if (!request.args.key || !length(trim(request.args.key)))
+				return { ok: false, error: 'Key 为空' };
+			writefile(KEY_FILE, trim(request.args.key) + '\n');
+			popen('chmod 600 ' + KEY_FILE);
+			return { ok: true };
+		}
+	},
+
+	clearApiKey: {
+		call: function() {
+			writefile(KEY_FILE, '');
+			return { ok: true };
+		}
+	}
+};
+
+return { aiassist: methods };

@@ -1,0 +1,12 @@
+#!/bin/sh
+# Initial setup for AI Assistant: create data dirs with strict permissions
+
+DATA=/etc/aiassist
+
+mkdir -p "$DATA/sessions" "$DATA/snapshots" "$DATA/jobs" "$DATA/locks" "$DATA/mtd" "$DATA/undo"
+
+# stateful dirs must not be shipped inside the package (they are created at first boot)
+touch "$DATA/audit.log"
+chmod 600 "$DATA/audit.log" "$DATA/api_key" 2>/dev/null
+
+exit 0
