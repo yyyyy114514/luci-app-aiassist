@@ -12,7 +12,7 @@ import {
 	load_config, api_key_status,
 	create_session, list_sessions, delete_session, rename_session, read_session,
 	get_system_info, list_mtd, backup_mtd, list_snapshots, snapshot_diff, get_snapshot_content,
-	rollback_session, create_snapshot, estimate_session_tokens, KEY_FILE
+	rollback_session, create_snapshot, estimate_session_tokens, key_file_path
 } from 'aiassist.lib';
 import { submit_job, poll_job, stop_job } from 'aiassist.core';
 import { call_ai } from 'aiassist.proto';
@@ -310,15 +310,15 @@ const methods = {
 		call: function(request) {
 			if (!request.args.key || !length(trim(request.args.key)))
 				return { ok: false, error: 'Key 为空' };
-			writefile(KEY_FILE, trim(request.args.key) + '\n');
-			popen('chmod 600 ' + KEY_FILE);
+			writefile(key_file_path(), trim(request.args.key) + '\n');
+			popen('chmod 600 ' + key_file_path());
 			return { ok: true };
 		}
 	},
 
 	clearApiKey: {
 		call: function() {
-			writefile(KEY_FILE, '');
+			writefile(key_file_path(), '');
 			return { ok: true };
 		}
 	}

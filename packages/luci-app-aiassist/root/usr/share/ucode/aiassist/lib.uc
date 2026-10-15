@@ -16,7 +16,11 @@ const JOBS_DIR    = DATA_DIR + '/jobs';
 const LOCK_DIR    = DATA_DIR + '/locks';
 const MTD_DIR     = DATA_DIR + '/mtd';
 const UNDO_DIR    = DATA_DIR + '/undo';
-export const KEY_FILE = DATA_DIR + '/api_key';
+const KEY_FILE    = DATA_DIR + '/api_key';
+
+export function key_file_path() {
+	return KEY_FILE;
+}
 const AUDIT_FILE  = DATA_DIR + '/audit.log';
 
 const MAX_COMMAND_LEN   = 2048;
