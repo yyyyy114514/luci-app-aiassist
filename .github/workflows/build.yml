@@ -25,10 +25,14 @@ jobs:
             ghcr.io/openwrt/rootfs:x86_64-master sh -c '
             set -e
             command -v ucode >/dev/null 2>&1 || { echo "ucode unavailable in container"; exit 1; }
-            mkdir -p /tmp/uc/aiassist /tmp/uc/rpcd
-            cp /src/usr/share/ucode/aiassist/*.uc /tmp/uc/aiassist/
-            cp /src/usr/share/rpcd/ucode/aiassist /tmp/uc/rpcd/
-            export UCODE_LIBRARY_PATH=/tmp/uc
+            # The rootfs container runs as root, so install the plugin exactly the
+            # way the ipk would: copy modules to the real /usr/share/ucode and the
+            # rpcd entry to /usr/share/rpcd/ucode. ucode resolves 'aiassist.lib'
+            # against the standard module search path (no env var needed).
+            mkdir -p /usr/share/ucode/aiassist /usr/share/rpcd/ucode /usr/libexec/aiassist
+            cp /src/usr/share/ucode/aiassist/*.uc /usr/share/ucode/aiassist/
+            cp /src/usr/share/rpcd/ucode/aiassist /usr/share/rpcd/ucode/aiassist
+            cp /src/usr/libexec/aiassist/worker.uc /usr/libexec/aiassist/worker.uc
             # NOTE: do NOT run ucode -c on the module files. They use export,
             # which is only legal in module mode (when loaded via import), exactly
             # how rpcd loads them. Compiling them standalone with -c reports a bogus
@@ -38,8 +42,9 @@ jobs:
             ucode -e "import * as lib from \"aiassist.lib\"; print(\"lib.uc: compile OK\\n\")"
             ucode -e "import * as proto from \"aiassist.proto\"; print(\"proto.uc: compile OK\\n\")"
             ucode -e "import * as core from \"aiassist.core\"; print(\"core.uc: compile OK\\n\")"
-            echo "== rpcd entry (standalone script, no exports) =="
-            ucode -c /tmp/uc/rpcd/aiassist && echo "rpcd entry: compile OK"
+            echo "== rpcd entry + worker (standalone scripts, no exports) =="
+            ucode -c /usr/share/rpcd/ucode/aiassist && echo "rpcd entry: compile OK"
+            ucode -c /usr/libexec/aiassist/worker.uc && echo "worker.uc: compile OK"
             echo "== import smoke test =="
             ucode -e "import * as l from \"aiassist.lib\"; import * as p from \"aiassist.proto\"; import * as c from \"aiassist.core\"; print(\"imports OK\\n\")"
             echo "== runtime smoke: load_config + token estimate =="
