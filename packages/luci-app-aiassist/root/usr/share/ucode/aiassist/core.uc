@@ -165,6 +165,20 @@ function auto_compress(sid, cfg) {
 
 // ---------------------------------------------------------------- AI loop
 
+function estimate_tokens(text) {
+	text = '' + (text || '');
+	let cjk = 0;
+	for (let i = 0; i < length(text); i++) {
+		let c = ord(substr(text, i, 1));
+		if ((c >= 0x4e00 && c <= 0x9fff) || (c >= 0x3400 && c <= 0x4dbf))
+			cjk++;
+	}
+	let other = length(text) - cjk;
+	return int(cjk * 1.5 + other / 4 + 0.999);
+}
+export function is_job_stopped(id) {
+	return access('/etc/aiassist/jobs/' + id + '.stop');
+}
 export function run_ai_loop(cfg, sid, content, jobid) {
 	let s = read_session(sid);
 	if (!s)
@@ -263,17 +277,7 @@ for (let __i3 = 0; __i3 < length(__arr3); __i3++) {
 	return { reply: final_text, tools: executed, rounds: loop };
 }
 
-function estimate_tokens(text) {
-	text = '' + (text || '');
-	let cjk = 0;
-	for (let i = 0; i < length(text); i++) {
-		let c = ord(substr(text, i, 1));
-		if ((c >= 0x4e00 && c <= 0x9fff) || (c >= 0x3400 && c <= 0x4dbf))
-			cjk++;
-	}
-	let other = length(text) - cjk;
-	return int(cjk * 1.5 + other / 4 + 0.999);
-}
+
 
 // ---------------------------------------------------------------- jobs (async worker)
 
@@ -298,9 +302,7 @@ export function write_job(j) {
 	writefile(job_path(j.id), sprintf('%J', j));
 }
 
-export function is_job_stopped(id) {
-	return access('/etc/aiassist/jobs/' + id + '.stop');
-}
+
 
 export function stop_job(id) {
 	writefile('/etc/aiassist/jobs/' + id + '.stop', time() + '\n');

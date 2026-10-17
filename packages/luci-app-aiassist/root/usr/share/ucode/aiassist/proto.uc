@@ -152,6 +152,12 @@ for (let __i2 = 0; __i2 < length(__arr2); __i2++) {
 
 // ---------------------------------------------------------------- summary handling
 
+function join_parts(parts) {
+	let out = '';
+	for (let i = 0; i < length(parts); i++)
+		out += (i ? '\n\n' : '') + parts[i];
+	return out;
+}
 export function collect_summary_text(messages) {
 	let parts = [];
 	let __arr3 = messages;
@@ -163,12 +169,7 @@ for (let __i3 = 0; __i3 < length(__arr3); __i3++) {
 	return length(parts) ? join_parts(parts) : null;
 }
 
-function join_parts(parts) {
-	let out = '';
-	for (let i = 0; i < length(parts); i++)
-		out += (i ? '\n\n' : '') + parts[i];
-	return out;
-}
+
 
 // ---------------------------------------------------------------- message conversion
 
@@ -324,6 +325,56 @@ for (let __i9 = 0; __i9 < length(__arr9); __i9++) {
 	return { text, tool_calls };
 }
 
+function http_once(cfg, payload) {
+	let bodyfile = randstr('/tmp/aiassist_body') + '.json';
+	let respfile = randstr('/tmp/aiassist_resp') + '.json';
+	let rcfile   = respfile + '.rc';
+
+	try {
+		writefile(bodyfile, sprintf('%J', payload));
+
+		let curl = sprintf('curl -sS --max-time %d -o %s --data-binary @%s', cfg.timeout, respfile, bodyfile);
+		if (cfg.proxy && length(cfg.proxy))
+			curl += ' --proxy ' + shellquote(cfg.proxy);
+		let __arr10 = api_headers(cfg);
+for (let __i10 = 0; __i10 < length(__arr10); __i10++) {
+	let h = __arr10[__i10];
+	curl += ' -H ' + shellquote(h);
+}
+
+		curl += ' ' + shellquote(api_endpoint(cfg)) + '; echo $? > ' + rcfile;
+
+		popen(curl).read('all');
+
+		let rc = trim(readfile(rcfile) || '');
+		if (rc != '0')
+			return { error: sprintf('API 网络请求失败（curl exit=%s，已重试 %d 次）：检查网络/代理/Base URL', rc, int(cfg.api_retries) || 2) };
+
+		let body = readfile(respfile) || '';
+		if (!length(body))
+			return { error: 'API 返回空响应（HTTP 4xx/5xx 时常见，请检查 Key/Base URL 权限）' };
+
+		let data;
+		try {
+			data = json(body);
+		}
+		catch (e) {
+			return { error: 'API 响应不是有效 JSON（可能被网关/代理拦截）' };
+		}
+
+		if (data?.error) {
+			let m = data.error.message || data.error.type || '未知错误';
+			return { error: 'API 返回错误: ' + m };
+		}
+
+		if (cfg.provider == 'anthropic')
+			return parse_anthropic(data);
+		return parse_openai(data);
+	}
+	catch (e) {
+		return { error: 'AI 调用异常: ' + e };
+	}
+}
 export function call_ai(cfg, messages, tools, extra_system) {
 	if (!cfg.api_key || !length(cfg.api_key))
 		return { error: '未配置 API Key，请在设置页填写并保存' };
@@ -387,56 +438,7 @@ export function call_ai(cfg, messages, tools, extra_system) {
 	return last;
 }
 
-function http_once(cfg, payload) {
-	let bodyfile = randstr('/tmp/aiassist_body') + '.json';
-	let respfile = randstr('/tmp/aiassist_resp') + '.json';
-	let rcfile   = respfile + '.rc';
 
-	try {
-		writefile(bodyfile, sprintf('%J', payload));
-
-		let curl = sprintf('curl -sS --max-time %d -o %s --data-binary @%s', cfg.timeout, respfile, bodyfile);
-		if (cfg.proxy && length(cfg.proxy))
-			curl += ' --proxy ' + shellquote(cfg.proxy);
-		let __arr10 = api_headers(cfg);
-for (let __i10 = 0; __i10 < length(__arr10); __i10++) {
-	let h = __arr10[__i10];
-	curl += ' -H ' + shellquote(h);
-}
-
-		curl += ' ' + shellquote(api_endpoint(cfg)) + '; echo $? > ' + rcfile;
-
-		popen(curl).read('all');
-
-		let rc = trim(readfile(rcfile) || '');
-		if (rc != '0')
-			return { error: sprintf('API 网络请求失败（curl exit=%s，已重试 %d 次）：检查网络/代理/Base URL', rc, int(cfg.api_retries) || 2) };
-
-		let body = readfile(respfile) || '';
-		if (!length(body))
-			return { error: 'API 返回空响应（HTTP 4xx/5xx 时常见，请检查 Key/Base URL 权限）' };
-
-		let data;
-		try {
-			data = json(body);
-		}
-		catch (e) {
-			return { error: 'API 响应不是有效 JSON（可能被网关/代理拦截）' };
-		}
-
-		if (data?.error) {
-			let m = data.error.message || data.error.type || '未知错误';
-			return { error: 'API 返回错误: ' + m };
-		}
-
-		if (cfg.provider == 'anthropic')
-			return parse_anthropic(data);
-		return parse_openai(data);
-	}
-	catch (e) {
-		return { error: 'AI 调用异常: ' + e };
-	}
-}
 
 // ---------------------------------------------------------------- context summarization
 

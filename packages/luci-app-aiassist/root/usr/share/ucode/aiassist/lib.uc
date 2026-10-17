@@ -225,33 +225,6 @@ export function write_session(s) {
 	writefile(session_path(s.id), sprintf('%J', s));
 }
 
-export function create_session(title) {
-	let sid = randstr('s');
-	let s = {
-		id: sid,
-		title: (title && length(title)) ? substr(title, 0, 60) : sprintf('会话 %s', sid),
-		created: now(), updated: now(), turn: 0, messages: []
-	};
-	write_session(s);
-
-	// enforce session retention: drop the oldest sessions beyond the limit
-	prune_sessions();
-	return s;
-}
-
-function prune_sessions() {
-	try {
-		let cfg = load_config();
-		let keep = int(cfg.session_retention) || 50;
-		let all = list_sessions();
-		if (length(all) <= keep)
-			return;
-		for (let i = keep; i < length(all); i++)
-			delete_session(all[i].id);
-	}
-	catch (e) {}
-}
-
 export function list_sessions() {
 	let out = [];
 	try {
@@ -267,12 +240,42 @@ export function list_sessions() {
 	sort(out, (a, b) => b.updated - a.updated);
 	return out;
 }
-
 export function delete_session(sid) {
 	unlink(session_path(sid));
 	popen('rm -rf ' + shellquote(SNAP_DIR + '/' + sid) + ' 2>/dev/null');
 	return { ok: true };
 }
+function prune_sessions() {
+	try {
+		let cfg = load_config();
+		let keep = int(cfg.session_retention) || 50;
+		let all = list_sessions();
+		if (length(all) <= keep)
+			return;
+		for (let i = keep; i < length(all); i++)
+			delete_session(all[i].id);
+	}
+	catch (e) {}
+}
+export function create_session(title) {
+	let sid = randstr('s');
+	let s = {
+		id: sid,
+		title: (title && length(title)) ? substr(title, 0, 60) : sprintf('会话 %s', sid),
+		created: now(), updated: now(), turn: 0, messages: []
+	};
+	write_session(s);
+
+	// enforce session retention: drop the oldest sessions beyond the limit
+	prune_sessions();
+	return s;
+}
+
+
+
+
+
+
 
 export function rename_session(sid, title) {
 	let s = read_session(sid);
@@ -322,6 +325,27 @@ for (let __i1 = 0; __i1 < length(__arr1); __i1++) {
 	return paths;
 }
 
+function prune_snapshots(sid, s) {
+	try {
+		let cfg = load_config();
+		let keep = int(cfg.snapshot_retention) || 30;
+		let snap_keys = keys(s.snapshots || {});
+		if (length(snap_keys) <= keep)
+			return;
+		sort(snap_keys, (a, b) => int(a) - int(b));
+		let drop = length(snap_keys) - keep;
+		for (let i = 0; i < drop; i++) {
+			let t = snap_keys[i];
+			let sn = s.snapshots[t];
+			unlink(SNAP_DIR + '/' + sid + '/' + sn.file);
+			if (sn.uci)
+				unlink(SNAP_DIR + '/' + sid + '/' + sn.uci);
+			s.snapshots = remove_key(s.snapshots, t);
+		}
+		write_session(s);
+	}
+	catch (e) {}
+}
 export function create_snapshot(sid, label) {
 	let s = read_session(sid);
 	if (!s)
@@ -356,27 +380,7 @@ export function create_snapshot(sid, label) {
 }
 
 // keep at most `snapshot_retention` snapshots per session (oldest dropped)
-function prune_snapshots(sid, s) {
-	try {
-		let cfg = load_config();
-		let keep = int(cfg.snapshot_retention) || 30;
-		let snap_keys = keys(s.snapshots || {});
-		if (length(snap_keys) <= keep)
-			return;
-		sort(snap_keys, (a, b) => int(a) - int(b));
-		let drop = length(snap_keys) - keep;
-		for (let i = 0; i < drop; i++) {
-			let t = snap_keys[i];
-			let sn = s.snapshots[t];
-			unlink(SNAP_DIR + '/' + sid + '/' + sn.file);
-			if (sn.uci)
-				unlink(SNAP_DIR + '/' + sid + '/' + sn.uci);
-			s.snapshots = remove_key(s.snapshots, t);
-		}
-		write_session(s);
-	}
-	catch (e) {}
-}
+
 
 export function list_snapshots(sid) {
 	let s = read_session(sid);
@@ -431,6 +435,15 @@ for (let __i13 = 0; __i13 < length(__arr13); __i13++) {
 }
 
 // compare the uci state frozen in a snapshot against the current live uci state
+function run_diff(diffbin, new_text, old_text) {
+	let f1 = randstr('/tmp/aias_diff') + '.new';
+	let f2 = randstr('/tmp/aias_diff') + '.old';
+	writefile(f1, new_text);
+	writefile(f2, old_text);
+	let out = popen(sprintf('%s -u %s %s 2>/dev/null', diffbin, shellquote(f2), shellquote(f1))).read('all') || '';
+	popen('rm -f ' + shellquote(f1) + ' ' + shellquote(f2));
+	return { ok: true, text: out || '（无差异）' };
+}
 export function snapshot_diff(sid, turn) {
 	let s = read_session(sid);
 	if (!s || !s.snapshots || !s.snapshots[turn])
@@ -477,15 +490,7 @@ for (let __i4 = 0; __i4 < length(__arr4); __i4++) {
 	return { ok: true, text: join(out, '\n') || '（无差异）' };
 }
 
-function run_diff(diffbin, new_text, old_text) {
-	let f1 = randstr('/tmp/aias_diff') + '.new';
-	let f2 = randstr('/tmp/aias_diff') + '.old';
-	writefile(f1, new_text);
-	writefile(f2, old_text);
-	let out = popen(sprintf('%s -u %s %s 2>/dev/null', diffbin, shellquote(f2), shellquote(f1))).read('all') || '';
-	popen('rm -f ' + shellquote(f1) + ' ' + shellquote(f2));
-	return { ok: true, text: out || '（无差异）' };
-}
+
 
 export function get_snapshot_content(sid, turn) {
 	let s = read_session(sid);
