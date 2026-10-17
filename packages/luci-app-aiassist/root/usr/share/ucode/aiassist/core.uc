@@ -51,7 +51,9 @@ export function build_full_system(cfg) {
 
 function dispatch_tool(name, args, ctx) {
 	args = args || {};
-	let { cfg, sid, permission } = ctx;
+	let cfg = ctx.cfg;
+	let sid = ctx.sid;
+	let permission = ctx.permission;
 
 	switch (name) {
 		case 'get_system_info':

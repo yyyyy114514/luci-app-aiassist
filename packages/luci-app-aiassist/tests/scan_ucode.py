@@ -15,7 +15,7 @@ PATTERNS = [
     ("method-style .length", r'\.length\s*[\);\]\s]'),
     ("method-style .join(", r'\.join\s*\('),
     ("method-style .slice(", r'\.slice\s*\('),
-    ("destructuring assignment", r'^\s*\{[^}]+\}\s*=|^\s*\[[^\]]+\]\s*=', re.M),
+    ("destructuring assignment", r'^\s*(?:let|const|var)?\s*\{[^}]*\}\s*=\s*[^=]|^\s*(?:let|const|var)?\s*\[[^\]]*\]\s*=\s*[^=]', re.M),
 ]
 
 def scan(path):
