@@ -20,18 +20,18 @@
 | 当前版本 | `PKG_VERSION:=1.1.2`（`packages/luci-app-aiassist/Makefile`） | ipk 文件名版本号来自这里，**不来自 git tag** |
 | 已发布 tag | `v1.1.0` / `v1.1.1` / `v1.1.2` | 都存在于 GitHub |
 | `v1.1.2` Release | 已发布，4 架构 ipk 齐全 | 本体 `luci-app-aiassist_1.1.2-r1_all.ipk` |
-| 最近提交 | `c7c8707 ci: fix ucode-lint sandbox` | master 比 v1.1.2 tag 多一个 CI commit |
+| 最近提交 | `713a16a fix: function definitions - ucode has NO hoisting` | master 领先 v1.1.2 tag 若干 commit（见下） |
 
 **v1.1.0 → v1.1.2 之间修过的真问题（历史，避免重复踩）：**
 - `v1.1.1`：用户装完报 "Object not found"。根因是 **ipk 版本号来自 `PKG_VERSION` 而非 git tag**，打 tag 时忘了同步 Makefile，导致产物名仍 `1.1.0-r1`。已修正，**发版 = 改 PKG_VERSION + 打 tag 两步缺一不可**（见第 6 节）。
-- `v1.1.2`：**真机 rpcd 完全加载不了插件**，所有 ubus 调用都 `-32000 Object not found`。根因是源码用了 ucode 不支持的 JS 语法（见第 2 节）。v1.1.2 已把全部源码重写为 ucode 兼容写法。这是本项目最痛的坑，下面专门讲。
+- `v1.1.2`：**真机 rpcd 完全加载不了插件**，所有 ubus 调用都 `-32000 Object not found`。根因是源码用了 ucode 不支持的 JS 语法（见第 2 节）。v1.1.2 已把全部源码重写为 ucode 兼容写法。
 
-**CI 状态（重要，未完全闭环）：**
-- `build` job（4 架构编译 + release 发布）：✅ 已验证通过。
-- `ucode-lint` job（真机 ucode 编译校验）：⚠️ **目前是"实验性"、未经完全验证**。它历史上连续失败（SDK 镜像无 ucode → 改 rootfs 镜像），commit `c7c8707` 切到 `ghcr.io/openwrt/rootfs:x86_64-master`，但**该镜像是否预装 `ucode`、`opkg install ucode` 能否离线成功，尚未在绿 CI 上确认**。因此：
-  - 不要因为 ucode-lint 失败就认为代码有问题；
-  - **本地的真正确认手段是 `tests/scan_ucode.py` + 真机测试**（见第 2.2、第 9 节）。
-  - 接手者优先把 ucode-lint 跑绿（或退化成可靠的校验方式），这是 v1.1.2 之后留下的最大 CI 债。
+> ⚠️ **重要**：v1.1.2 之后（master 未发版的 commit）又通过真机 lint 修掉了 **6 个运行时级 bug**（node 语法检查永远抓不到，必须真机执行才能暴露）——**这批修复尚未随 v1.1.2 发布**，发版前必须把 master 的 ucode-lint 修复一起带上（见第 6 节"发版流程"补充）。
+
+**CI 状态（2026-10-17 已全绿 ✅）：**
+- ✅ `ucode-lint`（独立 reusable workflow，见 `.github/workflows/ucode-lint.yml`）：真机 ucode 编译 + import + runtime smoke，**作为 build 的前置门禁**（`build needs: ucode-lint`，lint 不过编译不启动）。
+- ✅ `build`：4 架构编译（aarch64_cortex-a53 / x86_64 / mips_24kc / arm_cortex-a7_neon-vfpv4）。
+- ⏸ `release`：仅打 tag 时发布。
 
 ---
 
@@ -60,6 +60,10 @@
 | 解构赋值 | `let {a,b} = obj` | 不支持 | 逐字段取 |
 | `import * as` 命名空间导入 | `import * as x from 'mod'` | rpcd 加载器不一定支持 | 用 `import { a, b } from 'mod'` 具名导入 |
 | 顶层 `export const` | `export const X = 1` | 早期 rpcd 不支持（已验证修过） | 用 `export function` 或 `export const` 在**新版本**可，但稳妥起见常量放模块内、通过 `export function` 暴露 |
+| **函数声明不提升** | 函数 A 调用定义在后面的函数 B | **`Reference error: access to undeclared variable B`**（ucode 词法解析：调用点必须先于被调函数定义，与 JS hoisting 相反） | **所有函数必须先定义再被调用**；新增函数时注意放置位置，或跑 `tests/scan_ucode.py` 的前置调用检查 |
+| **`json()` 不能序列化** | `writefile(path, json(obj))` | `Type error: Input object does not implement read() method`——ucode 的 `json()` 只做**解析**（字符串/资源→值） | 序列化用 **`sprintf('%J', obj)`**（官方 netifd 用法） |
+| **无 `float()` / `double()` 全局** | `float(x)` / `double(x)` | `Reference error: access to undeclared variable float`——core 71 函数表无此函数 | 数值强制转换用一元 `+`：`let t = +cfg.temperature;`（`int(x, base)` 是唯一字符串→整数函数） |
+| **无 `rand()` 全局** | `rand() % 100` | `Reference error: access to undeclared variable rand`——随机数在 math 模块（`import ... from 'math'`），且部分 rootfs 没带 math.so | 用 `clock()`（纳秒单调时钟，core 函数）生成唯一后缀：`sprintf('%s_%d_%d', prefix, time(), clock())` |
 
 **嵌套循环变量名唯一性坑**：把 `for...of` 机械转成 `let __arr = ...; for(let __i=...)` 时，如果多次迭代转换，编号可能撞车导致内外层变量互相覆盖、运行期逻辑错乱。本项目 `tests/fix_forof.py` 已处理（编号取文件内已存在最大值 +1），**手写新循环时务必用全文件唯一的 `__arrN`/`__iN`**。
 
@@ -277,6 +281,8 @@ uhttpd → rpcd
 
 > 当前 CI 矩阵：`aarch64_cortex-a53`（ARMv8，如 R2S/R4S/ipq807x）、`x86_64`、`mips_24kc`（MT7620/21）、`arm_cortex-a7_neon-vfpv4`（MT7623/ipq40xx）。SDK 镜像 tag 用完整版本 `x86_64-24.10.0`（不是 `24.10`）。
 
+**⚠️ v1.1.2 之后的未发布修复**：真机 lint 在 master 上又抓出并修掉了 6 个运行时 bug（函数提升 7 处重排、`json()` 序列化 4 处、`float/double`、`rand`、解构、TDZ 遮蔽）——**这些 commit 尚未发版**。下次发版（v1.1.3 或更高）前先确认：`ucode-lint` 门禁绿 + `git log v1.1.2..HEAD --oneline` 里的 fix commit 都包含进来，再改 `PKG_VERSION` 打 tag。
+
 ---
 
 ## 7. 测试与 CI
@@ -291,8 +297,8 @@ uhttpd → rpcd
 
 ## 8. 已知问题 / TODO（留给接手者）
 
-1. **🔴 ucode-lint CI 未闭环**：rootfs 镜像方案未经验证，可能 `ucode` 未预装或 `opkg install` 离线失败。建议：要么验证 rootfs 可行，要么改成"构建产物里对 ipk 解包后 `ucode -c` 校验"，否则这个 job 长期红。
-2. **🟡 ACL 幽灵方法**：`acl.d` 里的 `listJobs`/`listApiKeyState` 无对应方法，清理之。
+1. **🟢 发版**：v1.1.2 之后的 6 个运行时修复（函数重排/json 序列化/float/double/rand/解构）已在 master 上全绿，**尚未发版**——下次发版直接带上（见第 6 节）。
+2. **🟡 ACL 幽灵方法**：`acl.d` 里的 `listJobs`/`listApiKeyState` 已删除（commit `db25e18`）。✅ 已解决
 3. **🟡 `args` 顺序三处必须对齐**（rpcd / chat.js params / settings.js 调用），无自动化校验，易错。可考虑改用具名参数传递（但 rpcd 约定是位置参数，需权衡）。
 4. **🟢 压缩摘要质量**：`summarize_messages` 依赖 AI 自己摘要，失败时降级为截断；可加"摘要命中率"统计。
 5. **🟢 多 Provider**：目前写死 OpenAI 兼容 + Anthropic。新增如 Gemini/DeepSeek 需扩 `call_ai` 的分支与 `api_endpoint`/`api_headers`。
