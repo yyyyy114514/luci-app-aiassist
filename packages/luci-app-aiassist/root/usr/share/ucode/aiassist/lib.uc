@@ -91,7 +91,7 @@ function now() {
 }
 
 export function randstr(prefix) {
-	return sprintf('%s_%d_%d', prefix, time(), rand() % 100000);
+	return sprintf('%s_%d_%d', prefix, time(), clock());
 }
 
 function audit(msg) {
