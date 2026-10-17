@@ -1,0 +1,61 @@
+name: ucode-lint
+
+# Reusable workflow: verifies the plugin's ucode sources compile AND run on a
+# real OpenWrt ucode interpreter (the exact thing rpcd does on the router).
+# This catches what `node --check` and the static scanner cannot:
+#   - for...of / spread / .sort() / `delete` / regex \u escapes
+#   - module export rules (export only legal in module mode)
+#   - lexical shadowing / TDZ errors detected at compile time
+# It is called by build.yml as a gate (build only starts after this passes),
+# and can also run on its own (PR paths filter, manual dispatch).
+on:
+  workflow_call:
+  pull_request:
+    paths:
+      - 'packages/luci-app-aiassist/root/usr/share/ucode/**'
+      - 'packages/luci-app-aiassist/root/usr/share/rpcd/**'
+      - 'packages/luci-app-aiassist/root/usr/libexec/**'
+      - '.github/workflows/ucode-lint.yml'
+  workflow_dispatch:
+
+jobs:
+  ucode-lint:
+    name: ucode syntax + import + runtime smoke (real OpenWrt ucode)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile & smoke-test with real OpenWrt ucode
+        run: |
+          # ghcr.io/openwrt/rootfs:x86_64-master is the real OpenWrt userspace
+          # and ships /usr/bin/ucode + all ucode modules (fs/uci/ubus/uclient/
+          # uloop/digest) built-in - no opkg/apk install step needed.
+          docker run --rm -v "$PWD/packages/luci-app-aiassist/root:/src:ro" \
+            ghcr.io/openwrt/rootfs:x86_64-master sh -c '
+            set -e
+            command -v ucode >/dev/null 2>&1 || { echo "ucode unavailable in container"; exit 1; }
+            # The rootfs container runs as root; install the plugin exactly the
+            # way the ipk would: modules to real /usr/share/ucode, entry to
+            # /usr/share/rpcd/ucode. ucode resolves "aiassist.lib" via the
+            # standard module search path (no env var needed).
+            mkdir -p /usr/share/ucode/aiassist /usr/share/rpcd/ucode /usr/libexec/aiassist
+            cp /src/usr/share/ucode/aiassist/*.uc /usr/share/ucode/aiassist/
+            cp /src/usr/share/rpcd/ucode/aiassist /usr/share/rpcd/ucode/aiassist
+            cp /src/usr/libexec/aiassist/worker.uc /usr/libexec/aiassist/worker.uc
+            # NOTE: never run ucode -c directly on module files (they use export,
+            # only legal in module mode). Compile them by importing, which is
+            # exactly how rpcd loads them.
+            echo "== module compile check (via import, as rpcd does) =="
+            ucode -e "import * as lib from \"aiassist.lib\"; print(\"lib.uc: compile OK\\n\")"
+            ucode -e "import * as proto from \"aiassist.proto\"; print(\"proto.uc: compile OK\\n\")"
+            ucode -e "import * as core from \"aiassist.core\"; print(\"core.uc: compile OK\\n\")"
+            echo "== rpcd entry + worker (standalone scripts, no exports) =="
+            ucode -c /usr/share/rpcd/ucode/aiassist && echo "rpcd entry: compile OK"
+            ucode -c /usr/libexec/aiassist/worker.uc && echo "worker.uc: compile OK"
+            echo "== import smoke test =="
+            ucode -e "import * as l from \"aiassist.lib\"; import * as p from \"aiassist.proto\"; import * as c from \"aiassist.core\"; print(\"imports OK\\n\")"
+            echo "== runtime smoke: load_config + token estimate =="
+            mkdir -p /etc/aiassist/sessions
+            printf "config aiassist settings\\n\\toption enabled 1\\n" > /etc/config/aiassist
+            ucode -e "import { load_config, estimate_session_tokens, create_session } from \"aiassist.lib\"; let cfg = load_config(); print(\"enabled=\" + cfg.enabled + \" provider=\" + cfg.provider + \"\\n\"); let s = create_session(\"ci-smoke\"); print(\"session=\" + s.id + \" tokens=\" + estimate_session_tokens(s) + \"\\n\"); print(\"runtime OK\\n\")"
+          '

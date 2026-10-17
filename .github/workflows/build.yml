@@ -4,57 +4,27 @@ on:
   push:
     branches: [ main, master ]
     tags: [ 'v*' ]
+    # only run the full build when the plugin sources or CI configs change
+    paths:
+      - 'packages/luci-app-aiassist/**'
+      - '.github/workflows/**'
+      - 'luci.mk'
   pull_request:
+    paths:
+      - 'packages/luci-app-aiassist/**'
+      - '.github/workflows/**'
+      - 'luci.mk'
   workflow_dispatch:
 
 jobs:
-  # Smoke-test that the ucode sources actually compile on a real OpenWrt ucode
-  # (node --check cannot catch ucode-incompatible constructs like for...of,
-  # array spread, method-style .sort() or `delete`). Fails fast on syntax errors.
+  # Gate: verify the ucode sources compile & run on a real OpenWrt ucode first.
+  # build needs this job, so compilation never starts on broken ucode.
   ucode-lint:
-    name: ucode syntax check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Compile ucode with real OpenWrt ucode
-        run: |
-          # The openwrt/rootfs image IS the real OpenWrt userspace and ships
-          # /usr/bin/ucode + all ucode modules (fs/uci/ubus/uclient/uloop/digest)
-          # built-in, so no opkg/apk install step is needed.
-          docker run --rm -v "$PWD/packages/luci-app-aiassist/root:/src:ro" \
-            ghcr.io/openwrt/rootfs:x86_64-master sh -c '
-            set -e
-            command -v ucode >/dev/null 2>&1 || { echo "ucode unavailable in container"; exit 1; }
-            # The rootfs container runs as root, so install the plugin exactly the
-            # way the ipk would: copy modules to the real /usr/share/ucode and the
-            # rpcd entry to /usr/share/rpcd/ucode. ucode resolves 'aiassist.lib'
-            # against the standard module search path (no env var needed).
-            mkdir -p /usr/share/ucode/aiassist /usr/share/rpcd/ucode /usr/libexec/aiassist
-            cp /src/usr/share/ucode/aiassist/*.uc /usr/share/ucode/aiassist/
-            cp /src/usr/share/rpcd/ucode/aiassist /usr/share/rpcd/ucode/aiassist
-            cp /src/usr/libexec/aiassist/worker.uc /usr/libexec/aiassist/worker.uc
-            # NOTE: do NOT run ucode -c on the module files. They use export,
-            # which is only legal in module mode (when loaded via import), exactly
-            # how rpcd loads them. Compiling them standalone with -c reports a bogus
-            # "Exports may only appear at top level of a module" error. So we
-            # verify each module by importing it, which is what the real rpcd does.
-            echo "== module compile check (via import, as rpcd does) =="
-            ucode -e "import * as lib from \"aiassist.lib\"; print(\"lib.uc: compile OK\\n\")"
-            ucode -e "import * as proto from \"aiassist.proto\"; print(\"proto.uc: compile OK\\n\")"
-            ucode -e "import * as core from \"aiassist.core\"; print(\"core.uc: compile OK\\n\")"
-            echo "== rpcd entry + worker (standalone scripts, no exports) =="
-            ucode -c /usr/share/rpcd/ucode/aiassist && echo "rpcd entry: compile OK"
-            ucode -c /usr/libexec/aiassist/worker.uc && echo "worker.uc: compile OK"
-            echo "== import smoke test =="
-            ucode -e "import * as l from \"aiassist.lib\"; import * as p from \"aiassist.proto\"; import * as c from \"aiassist.core\"; print(\"imports OK\\n\")"
-            echo "== runtime smoke: load_config + token estimate =="
-            mkdir -p /etc/aiassist/sessions
-            printf "config aiassist settings\\n\\toption enabled 1\\n" > /etc/config/aiassist
-            ucode -e "import { load_config, estimate_session_tokens, create_session } from \"aiassist.lib\"; let cfg = load_config(); print(\"enabled=\" + cfg.enabled + \" provider=\" + cfg.provider + \"\\n\"); let s = create_session(\"ci-smoke\"); print(\"session=\" + s.id + \" tokens=\" + estimate_session_tokens(s) + \"\\n\"); print(\"runtime OK\\n\")"
-          '
+    uses: ./.github/workflows/ucode-lint.yml
 
   build:
     name: ${{ matrix.arch }} (OpenWrt ${{ matrix.branch }})
+    needs: ucode-lint
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

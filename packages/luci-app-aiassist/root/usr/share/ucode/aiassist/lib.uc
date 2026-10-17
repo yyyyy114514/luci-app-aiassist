@@ -358,13 +358,13 @@ function prune_snapshots(sid, s) {
 	try {
 		let cfg = load_config();
 		let keep = int(cfg.snapshot_retention) || 30;
-		let keys = keys(s.snapshots || {});
-		if (length(keys) <= keep)
+		let snap_keys = keys(s.snapshots || {});
+		if (length(snap_keys) <= keep)
 			return;
-		sort(keys, (a, b) => int(a) - int(b));
-		let drop = length(keys) - keep;
+		sort(snap_keys, (a, b) => int(a) - int(b));
+		let drop = length(snap_keys) - keep;
 		for (let i = 0; i < drop; i++) {
-			let t = keys[i];
+			let t = snap_keys[i];
 			let sn = s.snapshots[t];
 			unlink(SNAP_DIR + '/' + sid + '/' + sn.file);
 			if (sn.uci)
