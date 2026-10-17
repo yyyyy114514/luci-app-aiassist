@@ -207,7 +207,7 @@ for (let __i5 = 0; __i5 < length(__arr5); __i5++) {
 			let __arr12 = (m.tool_calls || []);
 for (let __i12 = 0; __i12 < length(__arr12); __i12++) {
 	let tc = __arr12[__i12];
-	push(tcs, { id: tc.id, type: 'function', function: { name: tc.name, arguments: json(tc.args || {}) } });
+	push(tcs, { id: tc.id, type: 'function', function: { name: tc.name, arguments: sprintf('%J', tc.args || {}) } });
 }
 
 			push(out, { role: 'assistant', content: null, tool_calls: tcs });
@@ -393,7 +393,7 @@ function http_once(cfg, payload) {
 	let rcfile   = respfile + '.rc';
 
 	try {
-		writefile(bodyfile, json(payload));
+		writefile(bodyfile, sprintf('%J', payload));
 
 		let curl = sprintf('curl -sS --max-time %d -o %s --data-binary @%s', cfg.timeout, respfile, bodyfile);
 		if (cfg.proxy && length(cfg.proxy))

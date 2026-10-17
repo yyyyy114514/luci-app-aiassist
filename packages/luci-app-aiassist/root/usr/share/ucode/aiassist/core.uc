@@ -295,7 +295,7 @@ export function read_job(id) {
 }
 
 export function write_job(j) {
-	writefile(job_path(j.id), json(j));
+	writefile(job_path(j.id), sprintf('%J', j));
 }
 
 export function is_job_stopped(id) {

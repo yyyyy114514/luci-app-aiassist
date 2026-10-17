@@ -221,7 +221,8 @@ export function read_session(sid) {
 }
 
 export function write_session(s) {
-	writefile(session_path(s.id), json(s));
+	// ucode's json() only parses; serialize with sprintf("%J", ...)
+	writefile(session_path(s.id), sprintf('%J', s));
 }
 
 export function create_session(title) {
