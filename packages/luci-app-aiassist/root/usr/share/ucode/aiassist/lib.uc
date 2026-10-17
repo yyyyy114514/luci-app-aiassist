@@ -155,7 +155,7 @@ export function load_config() {
 	cfg.auto_snapshot  = (cfg.auto_snapshot == '1' || cfg.auto_snapshot == true);
 	cfg.mtd_backup     = (cfg.mtd_backup == '1' || cfg.mtd_backup == true);
 	cfg.full_risk_acknowledged = (cfg.full_risk_acknowledged == '1' || cfg.full_risk_acknowledged == true);
-	cfg.temperature    = float(cfg.temperature);
+	cfg.temperature    = double(cfg.temperature);
 	cfg.context_threshold = int(cfg.context_threshold) || 6000;
 	cfg.max_turns      = int(cfg.max_turns) || 20;
 	cfg.timeout        = int(cfg.timeout) || 60;
