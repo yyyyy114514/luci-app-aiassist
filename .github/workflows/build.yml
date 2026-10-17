@@ -21,14 +21,16 @@ jobs:
           docker run --rm -v "$PWD/packages/luci-app-aiassist/root:/src:ro" \
             ghcr.io/openwrt/sdk:x86_64-24.10.0 sh -c '
             set -e
-            mkdir -p /usr/share/ucode/aiassist /usr/share/rpcd/ucode
-            cp /src/usr/share/ucode/aiassist/*.uc /usr/share/ucode/aiassist/
-            cp /src/usr/share/rpcd/ucode/aiassist /usr/share/rpcd/ucode/aiassist
+            # the SDK container is not root; use a writable dir as module root
+            mkdir -p /tmp/uc/aiassist /tmp/uc/rpcd
+            cp /src/usr/share/ucode/aiassist/*.uc /tmp/uc/aiassist/
+            cp /src/usr/share/rpcd/ucode/aiassist /tmp/uc/rpcd/
+            export UCODE_LIBRARY_PATH=/tmp/uc
             echo "== compile check lib/proto/core/entry =="
-            ucode -c /usr/share/ucode/aiassist/lib.uc
-            ucode -c /usr/share/ucode/aiassist/proto.uc
-            ucode -c /usr/share/ucode/aiassist/core.uc
-            ucode -c /usr/share/rpcd/ucode/aiassist
+            ucode -c /tmp/uc/aiassist/lib.uc
+            ucode -c /tmp/uc/aiassist/proto.uc
+            ucode -c /tmp/uc/aiassist/core.uc
+            ucode -c /tmp/uc/rpcd/aiassist
             echo "== import smoke test =="
             ucode -e "import * as l from \"aiassist.lib\"; import * as p from \"aiassist.proto\"; import * as c from \"aiassist.core\"; print(\"imports OK\\n\")"
           '
