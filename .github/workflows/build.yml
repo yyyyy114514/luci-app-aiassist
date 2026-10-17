@@ -8,6 +8,31 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Smoke-test that the ucode sources actually compile on a real OpenWrt ucode
+  # (node --check cannot catch ucode-incompatible constructs like for...of,
+  # array spread, method-style .sort() or `delete`). Fails fast on syntax errors.
+  ucode-lint:
+    name: ucode syntax check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile ucode with real OpenWrt ucode
+        run: |
+          docker run --rm -v "$PWD/packages/luci-app-aiassist/root:/src:ro" \
+            ghcr.io/openwrt/sdk:x86_64-24.10.0 sh -c '
+            set -e
+            mkdir -p /usr/share/ucode/aiassist /usr/share/rpcd/ucode
+            cp /src/usr/share/ucode/aiassist/*.uc /usr/share/ucode/aiassist/
+            cp /src/usr/share/rpcd/ucode/aiassist /usr/share/rpcd/ucode/aiassist
+            echo "== compile check lib/proto/core/entry =="
+            ucode -c /usr/share/ucode/aiassist/lib.uc
+            ucode -c /usr/share/ucode/aiassist/proto.uc
+            ucode -c /usr/share/ucode/aiassist/core.uc
+            ucode -c /usr/share/rpcd/ucode/aiassist
+            echo "== import smoke test =="
+            ucode -e "import * as l from \"aiassist.lib\"; import * as p from \"aiassist.proto\"; import * as c from \"aiassist.core\"; print(\"imports OK\\n\")"
+          '
+
   build:
     name: ${{ matrix.arch }} (OpenWrt ${{ matrix.branch }})
     runs-on: ubuntu-latest

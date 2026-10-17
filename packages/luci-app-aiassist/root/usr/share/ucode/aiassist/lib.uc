@@ -106,6 +106,22 @@ function audit(msg) {
 	catch (e) {}
 }
 
+// ucode has no array/object spread and no `delete` operator: use these helpers
+function copy_array(a) {
+	let r = [];
+	for (let i = 0; i < length(a); i++)
+		push(r, a[i]);
+	return r;
+}
+
+function remove_key(obj, key) {
+	let r = {};
+	for (let k in obj)
+		if (k != key)
+			r[k] = obj[k];
+	return r;
+}
+
 // ---------------------------------------------------------------- configuration
 
 export function load_config() {
@@ -158,7 +174,7 @@ export function load_config() {
 	}
 	catch (e) {}
 
-	cfg.exec_allow = [ ...DEFAULT_ALLOW ];
+	cfg.exec_allow = copy_array(DEFAULT_ALLOW);
 	if (cfg.exec_allowlist) {
 		let extra = split(trim(cfg.exec_allowlist), /\s+/);
 		for (let i = 0; i < length(extra); i++)
@@ -166,7 +182,7 @@ export function load_config() {
 				push(cfg.exec_allow, extra[i]);
 	}
 
-	cfg.view_paths = [ ...VIEW_PATHS ];
+	cfg.view_paths = copy_array(VIEW_PATHS);
 	if (defs.view_paths && type(cfg.view_paths_str) == 'string' && length(trim(cfg.view_paths_str))) {
 		let extra = split(trim(cfg.view_paths_str), /\s+/);
 		for (let i = 0; i < length(extra); i++)
@@ -246,7 +262,7 @@ export function list_sessions() {
 			}
 	}
 	catch (e) {}
-	out.sort((a, b) => b.updated - a.updated);
+	sort(out, (a, b) => b.updated - a.updated);
 	return out;
 }
 
@@ -270,15 +286,24 @@ export function rename_session(sid, title) {
 
 function estimate_tokens(text) {
 	text = '' + text;
-	let cjk = length(replace(text, /[^\u4e00-\u9fff\u3400-\u4dbf]/g, ''));
+	let cjk = 0;
+	for (let i = 0; i < length(text); i++) {
+		let c = ord(substr(text, i, 1));
+		if ((c >= 0x4e00 && c <= 0x9fff) || (c >= 0x3400 && c <= 0x4dbf))
+			cjk++;
+	}
 	let other = length(text) - cjk;
 	return int(cjk * 1.5 + other / 4 + 0.999);
 }
 
 export function estimate_session_tokens(s) {
 	let total = 0;
-	for (let m of s.messages)
-		total += estimate_tokens(m.content || '') + 8;
+	let __arr0 = s.messages;
+for (let __i0 = 0; __i0 < length(__arr0); __i0++) {
+	let m = __arr0[__i0];
+	total += estimate_tokens(m.content || '') + 8;
+}
+
 	return total;
 }
 
@@ -286,9 +311,12 @@ export function estimate_session_tokens(s) {
 
 function snapshot_paths() {
 	let paths = [ 'etc/config' ];
-	for (let p of [ 'etc/rc.local', 'etc/firewall.user', 'etc/sysctl.conf', 'etc/hosts', 'etc/dnsmasq.conf' ])
-		if (access('/' + p))
+	let __arr1 = [ 'etc/rc.local', 'etc/firewall.user', 'etc/sysctl.conf', 'etc/hosts', 'etc/dnsmasq.conf' ];
+for (let __i1 = 0; __i1 < length(__arr1); __i1++) {
+	let p = __arr1[__i1];
+	if (access('/' + p))
 			push(paths, p);
+}
 	return paths;
 }
 
@@ -333,7 +361,7 @@ function prune_snapshots(sid, s) {
 		let keys = keys(s.snapshots || {});
 		if (length(keys) <= keep)
 			return;
-		keys.sort((a, b) => int(a) - int(b));
+		sort(keys, (a, b) => int(a) - int(b));
 		let drop = length(keys) - keep;
 		for (let i = 0; i < drop; i++) {
 			let t = keys[i];
@@ -341,7 +369,7 @@ function prune_snapshots(sid, s) {
 			unlink(SNAP_DIR + '/' + sid + '/' + sn.file);
 			if (sn.uci)
 				unlink(SNAP_DIR + '/' + sid + '/' + sn.uci);
-			delete s.snapshots[t];
+			s.snapshots = remove_key(s.snapshots, t);
 		}
 		write_session(s);
 	}
@@ -355,11 +383,17 @@ export function list_snapshots(sid) {
 
 	// summarize what happened in each snapshot turn (tools executed, commands run)
 	let turn_summary = {};
-	for (let m of s.messages) {
+	let __arr2 = s.messages;
+for (let __i2 = 0; __i2 < length(__arr2); __i2++) {
+	let m = __arr2[__i2];
+	{
 		if (!m.turn)
 			continue;
 		if (m.kind == 'tool' && m.role == 'assistant') {
-			for (let tc of (m.tool_calls || [])) {
+			let __arr13 = (m.tool_calls || []);
+for (let __i13 = 0; __i13 < length(__arr13); __i13++) {
+	let tc = __arr13[__i13];
+	{
 				let label = tc.name;
 				if (tc.name == 'exec_command' && tc.args && tc.args.command)
 					label += ': ' + trunc(tc.args.command, 80);
@@ -367,11 +401,15 @@ export function list_snapshots(sid) {
 					label += ': 第 ' + (tc.args && tc.args.turn) + ' 轮';
 				push(turn_summary[m.turn] || (turn_summary[m.turn] = []), label);
 			}
+}
+
 		}
 		else if (m.kind == 'text' && m.role == 'user') {
 			push(turn_summary[m.turn] || (turn_summary[m.turn] = []), '提问: ' + trunc(m.content, 60));
 		}
 	}
+}
+
 
 	let out = [];
 	if (s.snapshots)
@@ -386,7 +424,7 @@ export function list_snapshots(sid) {
 				actions: turn_summary[t] || []
 			});
 		}
-	out.sort((a, b) => a.turn - b.turn);
+	sort(out, (a, b) => a.turn - b.turn);
 	return { ok: true, snapshots: out };
 }
 
@@ -422,12 +460,18 @@ export function snapshot_diff(sid, turn) {
 	let out = [];
 	let old_lines = split(old_text, /\n/);
 	let new_lines = split(new_text, /\n/);
-	for (let l of new_lines)
-		if (length(l) && !in_array(old_lines, l))
+	let __arr3 = new_lines;
+for (let __i3 = 0; __i3 < length(__arr3); __i3++) {
+	let l = __arr3[__i3];
+	if (length(l) && !in_array(old_lines, l))
 			push(out, '+ ' + l);
-	for (let l of old_lines)
-		if (length(l) && !in_array(new_lines, l))
+}
+	let __arr4 = old_lines;
+for (let __i4 = 0; __i4 < length(__arr4); __i4++) {
+	let l = __arr4[__i4];
+	if (length(l) && !in_array(new_lines, l))
 			push(out, '- ' + l);
+}
 	return { ok: true, text: join(out, '\n') || '（无差异）' };
 }
 
@@ -481,13 +525,16 @@ export function rollback_session(sid, turn, confirm) {
 
 		// 3. truncate session history to before this turn
 		let keep = [];
-		for (let m of s.messages)
-			if (!(m.turn && m.turn >= turn))
+		let __arr5 = s.messages;
+for (let __i5 = 0; __i5 < length(__arr5); __i5++) {
+	let m = __arr5[__i5];
+	if (!(m.turn && m.turn >= turn))
 				push(keep, m);
+}
 		s.messages = keep;
 		s.turn = turn - 1;
 		s.updated = now();
-		delete s.snapshots[turn];
+		s.snapshots = remove_key(s.snapshots, turn);
 		write_session(s);
 
 		// 4. apply configuration to services
@@ -566,16 +613,22 @@ export function backup_mtd(device) {
 
 	if (device != 'all' && device != 'full') {
 		let hit = false;
-		for (let p of lm.parts)
-			if (p.dev == device) {
+		let __arr6 = lm.parts;
+for (let __i6 = 0; __i6 < length(__arr6); __i6++) {
+	let p = __arr6[__i6];
+	if (p.dev == device) {
 				push(targets, p);
 				hit = true;
+}
 			}
 		if (!hit)
 			return { ok: false, text: '分区不存在: ' + device + '（可先用 list_mtd 查看分区表）' };
 	}
 	else {
-		for (let p of lm.parts) {
+		let __arr7 = lm.parts;
+for (let __i7 = 0; __i7 < length(__arr7); __i7++) {
+	let p = __arr7[__i7];
+	{
 			let sz_kb = int(p.size, 16) / 1024;
 			let big = match(p.name, /firmware|kernel|rootfs|ubi|image/i) || sz_kb > 8192;
 			if (device == 'full' || !big)
@@ -583,6 +636,8 @@ export function backup_mtd(device) {
 			else
 				push(skipped, sprintf('%s(%s,%dkB)', p.dev, p.name, sz_kb));
 		}
+}
+
 	}
 
 	if (!length(targets))
@@ -597,8 +652,12 @@ export function backup_mtd(device) {
 
 		// space pre-check: refuse when the image would fill the backing filesystem
 		let need_kb = 0;
-		for (let p of targets)
-			need_kb += int(p.size, 16) / 1024;
+		let __arr8 = targets;
+for (let __i8 = 0; __i8 < length(__arr8); __i8++) {
+	let p = __arr8[__i8];
+	need_kb += int(p.size, 16) / 1024;
+}
+
 		let free_kb = avail_kb(MTD_DIR);
 		if (free_kb > 0 && need_kb > free_kb * 0.9)
 			return {
@@ -618,13 +677,18 @@ export function backup_mtd(device) {
 		push(done, 'partition_table.txt (分区表)');
 
 		// 2. raw images of the selected partitions (single dd, bs=128k)
-		for (let p of targets) {
+		let __arr9 = targets;
+for (let __i9 = 0; __i9 < length(__arr9); __i9++) {
+	let p = __arr9[__i9];
+	{
 			let sz_kb = int(p.size, 16) / 1024;
 			let fname = replace(sprintf('%s_%s.bin', p.dev, p.name), /[^a-zA-Z0-9._-]/g, '_');
 			let out = dir_now + '/' + fname;
 			popen(sprintf('dd if=/dev/%s of=%s bs=128k 2>/dev/null', p.dev, shellquote(out))).read('all');
 			push(done, sprintf('%s(%s,%dkB)', p.dev, p.name, sz_kb));
 		}
+}
+
 
 		// 3. config archive via sysupgrade -b (lightweight, day-to-day recovery)
 		if (access('/sbin/sysupgrade')) {
@@ -681,9 +745,12 @@ export function check_exec(permission, command, cfg) {
 	if (permission == 'readonly')
 		return { ok: false, reason: '当前为只读权限（readonly），AI 无权执行命令' };
 
-	for (let re of FATAL_PATTERNS)
-		if (match(command, re))
+	let __arr10 = FATAL_PATTERNS;
+for (let __i10 = 0; __i10 < length(__arr10); __i10++) {
+	let re = __arr10[__i10];
+	if (match(command, re))
 			return { ok: false, reason: '危险命令被拦截（该操作无法通过快照恢复）' };
+}
 
 	if (permission == 'full')
 		return { ok: true };
@@ -696,9 +763,12 @@ export function check_exec(permission, command, cfg) {
 		return { ok: false, reason: '受限模式禁止路径穿越' };
 
 	let c = trim(command);
-	for (let pre of cfg.exec_allow)
-		if (substr(c, 0, length(pre)) == pre)
+	let __arr11 = cfg.exec_allow;
+for (let __i11 = 0; __i11 < length(__arr11); __i11++) {
+	let pre = __arr11[__i11];
+	if (substr(c, 0, length(pre)) == pre)
 			return { ok: true };
+}
 
 	return { ok: false, reason: '命令不在受限模式白名单（可在设置页 exec_allowlist 添加前缀，或切换到 full 权限）' };
 }
@@ -742,11 +812,16 @@ function allowed_view_path(cfg, path) {
 		let rp = realpath(path);
 		if (!rp)
 			return false;
-		for (let p of cfg.view_paths) {
+		let __arr12 = cfg.view_paths;
+for (let __i12 = 0; __i12 < length(__arr12); __i12++) {
+	let p = __arr12[__i12];
+	{
 			let rpp = realpath(p) || p;
 			if (substr(rp, 0, length(rpp)) == rpp)
 				return true;
 		}
+}
+
 	}
 	catch (e) {}
 	return false;

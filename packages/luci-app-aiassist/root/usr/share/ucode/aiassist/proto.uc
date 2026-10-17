@@ -119,23 +119,34 @@ export function tools_for_permission(permission) {
 			exec_command: 1, create_backup: 1, list_backups: 1, rollback: 1, backup_mtd: 1 };
 
 	let out = [];
-	for (let t of TOOL_DEFS)
-		if (allowed[t.name])
+	let __arr0 = TOOL_DEFS;
+for (let __i0 = 0; __i0 < length(__arr0); __i0++) {
+	let t = __arr0[__i0];
+	if (allowed[t.name])
 			push(out, t);
+}
 	return out;
 }
 
 function to_openai_tools(tools) {
 	let out = [];
-	for (let t of tools)
-		push(out, { type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } });
+	let __arr1 = tools;
+for (let __i1 = 0; __i1 < length(__arr1); __i1++) {
+	let t = __arr1[__i1];
+	push(out, { type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } });
+}
+
 	return out;
 }
 
 function to_anthropic_tools(tools) {
 	let out = [];
-	for (let t of tools)
-		push(out, { name: t.name, description: t.description, input_schema: t.parameters });
+	let __arr2 = tools;
+for (let __i2 = 0; __i2 < length(__arr2); __i2++) {
+	let t = __arr2[__i2];
+	push(out, { name: t.name, description: t.description, input_schema: t.parameters });
+}
+
 	return out;
 }
 
@@ -143,9 +154,12 @@ function to_anthropic_tools(tools) {
 
 export function collect_summary_text(messages) {
 	let parts = [];
-	for (let m of messages)
-		if (m.kind == 'summary')
+	let __arr3 = messages;
+for (let __i3 = 0; __i3 < length(__arr3); __i3++) {
+	let m = __arr3[__i3];
+	if (m.kind == 'summary')
 			push(parts, m.content);
+}
 	return length(parts) ? join_parts(parts) : null;
 }
 
@@ -161,13 +175,18 @@ function join_parts(parts) {
 // merge adjacent messages of the same role (text-only) for OpenAI
 function merge_adjacent_openai(arr) {
 	let out = [];
-	for (let m of arr) {
+	let __arr4 = arr;
+for (let __i4 = 0; __i4 < length(__arr4); __i4++) {
+	let m = __arr4[__i4];
+	{
 		let last = out[length(out) - 1];
 		if (last && last.role == m.role && last.content != null && m.content != null && !last.tool_calls && !m.tool_calls)
 			last.content = last.content + '\n\n' + m.content;
 		else
 			push(out, m);
 	}
+}
+
 	return out;
 }
 
@@ -176,14 +195,21 @@ function to_openai_messages(messages, sys_text) {
 	if (sys_text && length(sys_text))
 		push(out, { role: 'system', content: sys_text });
 
-	for (let m of messages) {
+	let __arr5 = messages;
+for (let __i5 = 0; __i5 < length(__arr5); __i5++) {
+	let m = __arr5[__i5];
+	{
 		if (m.kind == 'summary')
 			continue;
 
 		if (m.kind == 'tool' && m.role == 'assistant') {
 			let tcs = [];
-			for (let tc of (m.tool_calls || []))
-				push(tcs, { id: tc.id, type: 'function', function: { name: tc.name, arguments: json(tc.args || {}) } });
+			let __arr12 = (m.tool_calls || []);
+for (let __i12 = 0; __i12 < length(__arr12); __i12++) {
+	let tc = __arr12[__i12];
+	push(tcs, { id: tc.id, type: 'function', function: { name: tc.name, arguments: json(tc.args || {}) } });
+}
+
 			push(out, { role: 'assistant', content: null, tool_calls: tcs });
 		}
 		else if (m.kind == 'tool' && m.role == 'user') {
@@ -193,27 +219,40 @@ function to_openai_messages(messages, sys_text) {
 			push(out, { role: m.role, content: m.content || '' });
 		}
 	}
+}
+
 
 	return merge_adjacent_openai(out);
 }
 
 function merge_adjacent_anthropic(arr) {
 	let out = [];
-	for (let m of arr) {
+	let __arr6 = arr;
+for (let __i6 = 0; __i6 < length(__arr6); __i6++) {
+	let m = __arr6[__i6];
+	{
 		let last = out[length(out) - 1];
 		if (last && last.role == m.role) {
-			last.content = [ ...last.content, ...m.content ];
+			// append m.content blocks onto last.content (ucode has no array spread)
+			let __src = m.content;
+			for (let __j = 0; __j < length(__src); __j++)
+				push(last.content, __src[__j]);
 		}
 		else {
 			push(out, m);
 		}
 	}
+}
+
 	return out;
 }
 
 function to_anthropic_messages(messages) {
 	let out = [];
-	for (let m of messages) {
+	let __arr7 = messages;
+for (let __i7 = 0; __i7 < length(__arr7); __i7++) {
+	let m = __arr7[__i7];
+	{
 		// anthropic does not allow role=system inside messages; summaries & system go to the system field
 		if (m.kind == 'summary' || m.role == 'system')
 			continue;
@@ -222,8 +261,12 @@ function to_anthropic_messages(messages) {
 			let blocks = [];
 			if (m.text && length(m.text))
 				push(blocks, { type: 'text', text: m.text });
-			for (let tc of (m.tool_calls || []))
-				push(blocks, { type: 'tool_use', id: tc.id, name: tc.name, input: tc.args || {} });
+			let __arr13 = (m.tool_calls || []);
+for (let __i13 = 0; __i13 < length(__arr13); __i13++) {
+	let tc = __arr13[__i13];
+	push(blocks, { type: 'tool_use', id: tc.id, name: tc.name, input: tc.args || {} });
+}
+
 			push(out, { role: 'assistant', content: blocks });
 		}
 		else if (m.role == 'user' && m.kind == 'tool') {
@@ -233,6 +276,8 @@ function to_anthropic_messages(messages) {
 			push(out, { role: m.role, content: [ { type: 'text', text: m.content || '' } ] });
 		}
 	}
+}
+
 	return merge_adjacent_anthropic(out);
 }
 
@@ -246,7 +291,10 @@ function parse_openai(data) {
 	let msg = choice.message || {};
 	let text = (msg.content != null) ? ('' + msg.content) : null;
 	let tool_calls = [];
-	for (let tc of (msg.tool_calls || [])) {
+	let __arr8 = (msg.tool_calls || []);
+for (let __i8 = 0; __i8 < length(__arr8); __i8++) {
+	let tc = __arr8[__i8];
+	{
 		let args = {};
 		try {
 			args = json(tc.function.arguments);
@@ -254,18 +302,25 @@ function parse_openai(data) {
 		catch (e) {}
 		push(tool_calls, { id: tc.id, name: tc.function.name, args });
 	}
+}
+
 	return { text, tool_calls };
 }
 
 function parse_anthropic(data) {
 	let text = null;
 	let tool_calls = [];
-	for (let blk of (data.content || [])) {
+	let __arr9 = (data.content || []);
+for (let __i9 = 0; __i9 < length(__arr9); __i9++) {
+	let blk = __arr9[__i9];
+	{
 		if (blk.type == 'text')
 			text = (text ? text : '') + blk.text;
 		else if (blk.type == 'tool_use')
 			push(tool_calls, { id: blk.id, name: blk.name, args: blk.input || {} });
 	}
+}
+
 	return { text, tool_calls };
 }
 
@@ -343,8 +398,12 @@ function http_once(cfg, payload) {
 		let curl = sprintf('curl -sS --max-time %d -o %s --data-binary @%s', cfg.timeout, respfile, bodyfile);
 		if (cfg.proxy && length(cfg.proxy))
 			curl += ' --proxy ' + shellquote(cfg.proxy);
-		for (let h of api_headers(cfg))
-			curl += ' -H ' + shellquote(h);
+		let __arr10 = api_headers(cfg);
+for (let __i10 = 0; __i10 < length(__arr10); __i10++) {
+	let h = __arr10[__i10];
+	curl += ' -H ' + shellquote(h);
+}
+
 		curl += ' ' + shellquote(api_endpoint(cfg)) + '; echo $? > ' + rcfile;
 
 		popen(curl).read('all');
@@ -388,9 +447,12 @@ export function summarize_messages(cfg, messages) {
 		'只输出摘要文本本身，不要输出任何其他内容。';
 
 	let internal = [];
-	for (let m of messages)
-		if (m.role == 'user' || m.role == 'assistant')
+	let __arr11 = messages;
+for (let __i11 = 0; __i11 < length(__arr11); __i11++) {
+	let m = __arr11[__i11];
+	if (m.role == 'user' || m.role == 'assistant')
 			push(internal, { role: m.role, kind: 'text', content: m.content || '' });
+}
 
 	// summarization is a plain completion (no tools); instruction goes to the system field
 	let resp = call_ai(cfg, internal, [], sys);

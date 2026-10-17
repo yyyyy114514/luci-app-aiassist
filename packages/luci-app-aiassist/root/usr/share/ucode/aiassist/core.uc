@@ -89,7 +89,10 @@ export function compress_session(sid) {
 	// group text rounds by turn number, keep chronological order
 	let rounds = {};
 	let order = [];
-	for (let m of s.messages) {
+	let __arr0 = s.messages;
+for (let __i0 = 0; __i0 < length(__arr0); __i0++) {
+	let m = __arr0[__i0];
+	{
 		if ((m.role == 'user' || m.role == 'assistant') && m.kind == 'text' && m.turn) {
 			if (!rounds[m.turn]) {
 				rounds[m.turn] = [];
@@ -98,6 +101,8 @@ export function compress_session(sid) {
 			push(rounds[m.turn], m);
 		}
 	}
+}
+
 
 	if (length(order) <= 1)
 		return { ok: false, changed: false, reason: '对话太短，无需压缩' };
@@ -111,8 +116,12 @@ export function compress_session(sid) {
 	for (let i = 0; i < target; i++) {
 		let t = order[i];
 		victim_turns[t] = 1;
-		for (let m of rounds[t])
-			push(victim, m);
+		let __arr1 = rounds[t];
+for (let __i1 = 0; __i1 < length(__arr1); __i1++) {
+	let m = __arr1[__i1];
+	push(victim, m);
+}
+
 	}
 
 	let cfg = load_config();
@@ -126,9 +135,12 @@ export function compress_session(sid) {
 	}
 
 	let final = [ { role: 'system', kind: 'summary', content: summary, ts: time() } ];
-	for (let m of s.messages)
-		if (!(m.turn && victim_turns[m.turn]))
+	let __arr2 = s.messages;
+for (let __i2 = 0; __i2 < length(__arr2); __i2++) {
+	let m = __arr2[__i2];
+	if (!(m.turn && victim_turns[m.turn]))
 			push(final, m);
+}
 
 	s.messages = final;
 	s.updated = time();
@@ -202,7 +214,10 @@ export function run_ai_loop(cfg, sid, content, jobid) {
 			break;
 		}
 
-		for (let tc of resp.tool_calls) {
+		let __arr3 = resp.tool_calls;
+for (let __i3 = 0; __i3 < length(__arr3); __i3++) {
+	let tc = __arr3[__i3];
+	{
 			// reload session before dispatching: dispatch may write snapshots / truncate history
 			s = read_session(sid);
 
@@ -228,6 +243,8 @@ export function run_ai_loop(cfg, sid, content, jobid) {
 				break;
 			}
 		}
+}
+
 
 		loop++;
 	}
@@ -246,7 +263,12 @@ export function run_ai_loop(cfg, sid, content, jobid) {
 
 function estimate_tokens(text) {
 	text = '' + (text || '');
-	let cjk = length(replace(text, /[^\u4e00-\u9fff\u3400-\u4dbf]/g, ''));
+	let cjk = 0;
+	for (let i = 0; i < length(text); i++) {
+		let c = ord(substr(text, i, 1));
+		if ((c >= 0x4e00 && c <= 0x9fff) || (c >= 0x3400 && c <= 0x4dbf))
+			cjk++;
+	}
 	let other = length(text) - cjk;
 	return int(cjk * 1.5 + other / 4 + 0.999);
 }
