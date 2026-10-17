@@ -8,14 +8,12 @@
 					"getSettings",
 					"listSessions",
 					"getSession",
-					"listJobs",
 					"pollJob",
 					"getSystemInfo",
 					"listSnapshots",
 					"snapshotDiff",
 					"getSnapshot",
-					"listMtd",
-					"listApiKeyState"
+					"listMtd"
 				]
 			}
 		},

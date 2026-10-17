@@ -18,10 +18,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: Compile ucode with real OpenWrt ucode
         run: |
+          # The openwrt/rootfs image IS the real OpenWrt userspace and ships
+          # /usr/bin/ucode + all ucode modules (fs/uci/ubus/uclient/uloop/digest)
+          # built-in, so no opkg/apk install step is needed.
           docker run --rm -v "$PWD/packages/luci-app-aiassist/root:/src:ro" \
-            ghcr.io/openwrt/sdk:x86_64-24.10.0 sh -c '
+            ghcr.io/openwrt/rootfs:x86_64-master sh -c '
             set -e
-            # the SDK container is not root; use a writable dir as module root
+            command -v ucode >/dev/null 2>&1 || { echo "ucode unavailable in container"; exit 1; }
             mkdir -p /tmp/uc/aiassist /tmp/uc/rpcd
             cp /src/usr/share/ucode/aiassist/*.uc /tmp/uc/aiassist/
             cp /src/usr/share/rpcd/ucode/aiassist /tmp/uc/rpcd/
@@ -33,6 +36,10 @@ jobs:
             ucode -c /tmp/uc/rpcd/aiassist
             echo "== import smoke test =="
             ucode -e "import * as l from \"aiassist.lib\"; import * as p from \"aiassist.proto\"; import * as c from \"aiassist.core\"; print(\"imports OK\\n\")"
+            echo "== runtime smoke: load_config + token estimate =="
+            mkdir -p /etc/aiassist/sessions
+            printf "config aiassist settings\\n\\toption enabled 1\\n" > /etc/config/aiassist
+            ucode -e "import { load_config, estimate_session_tokens, create_session } from \"aiassist.lib\"; let cfg = load_config(); print(\"enabled=\" + cfg.enabled + \" provider=\" + cfg.provider + \"\\n\"); let s = create_session(\"ci-smoke\"); print(\"session=\" + s.id + \" tokens=\" + estimate_session_tokens(s) + \"\\n\"); print(\"runtime OK\\n\")"
           '
 
   build:
