@@ -29,15 +29,15 @@ jobs:
             cp /src/usr/share/ucode/aiassist/*.uc /tmp/uc/aiassist/
             cp /src/usr/share/rpcd/ucode/aiassist /tmp/uc/rpcd/
             export UCODE_LIBRARY_PATH=/tmp/uc
-            # NOTE: do NOT run `ucode -c` on the module files. They use `export`,
-            # which is only legal in module mode (when loaded via `import`), exactly
+            # NOTE: do NOT run ucode -c on the module files. They use export,
+            # which is only legal in module mode (when loaded via import), exactly
             # how rpcd loads them. Compiling them standalone with -c reports a bogus
             # "Exports may only appear at top level of a module" error. So we
             # verify each module by importing it, which is what the real rpcd does.
             echo "== module compile check (via import, as rpcd does) =="
-            ucode -e 'import * as lib from "aiassist.lib"; print("lib.uc: compile OK\n")'
-            ucode -e 'import * as proto from "aiassist.proto"; print("proto.uc: compile OK\n")'
-            ucode -e 'import * as core from "aiassist.core"; print("core.uc: compile OK\n")'
+            ucode -e "import * as lib from \"aiassist.lib\"; print(\"lib.uc: compile OK\\n\")"
+            ucode -e "import * as proto from \"aiassist.proto\"; print(\"proto.uc: compile OK\\n\")"
+            ucode -e "import * as core from \"aiassist.core\"; print(\"core.uc: compile OK\\n\")"
             echo "== rpcd entry (standalone script, no exports) =="
             ucode -c /tmp/uc/rpcd/aiassist && echo "rpcd entry: compile OK"
             echo "== import smoke test =="
