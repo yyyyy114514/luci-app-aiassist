@@ -9,7 +9,7 @@ import { shellquote, randstr } from 'aiassist.lib';
 
 // ---------------------------------------------------------------- endpoints & headers
 
-export function api_endpoint(cfg) {
+export const api_endpoint = function(cfg) {
 	let base = trim(cfg.base_url);
 	base = replace(base, /\/+$/, '');
 	if (cfg.provider == 'anthropic') {
@@ -20,7 +20,7 @@ export function api_endpoint(cfg) {
 	if (match(base, /\/chat\/completions$/))
 		return base;
 	return base + '/chat/completions';
-}
+};
 
 function api_headers(cfg) {
 	if (cfg.provider == 'anthropic')
@@ -109,7 +109,7 @@ const TOOL_DEFS = [
 	}
 ];
 
-export function tools_for_permission(permission) {
+export const tools_for_permission = function(permission) {
 	let allowed = { get_system_info: 1, view_config: 1, get_log: 1, list_mtd: 1 };
 	if (permission == 'limited')
 		allowed = { get_system_info: 1, view_config: 1, get_log: 1, list_mtd: 1,
@@ -126,7 +126,7 @@ for (let __i0 = 0; __i0 < length(__arr0); __i0++) {
 			push(out, t);
 }
 	return out;
-}
+};
 
 function to_openai_tools(tools) {
 	let out = [];
@@ -158,7 +158,7 @@ function join_parts(parts) {
 		out += (i ? '\n\n' : '') + parts[i];
 	return out;
 }
-export function collect_summary_text(messages) {
+export const collect_summary_text = function(messages) {
 	let parts = [];
 	let __arr3 = messages;
 for (let __i3 = 0; __i3 < length(__arr3); __i3++) {
@@ -167,7 +167,7 @@ for (let __i3 = 0; __i3 < length(__arr3); __i3++) {
 			push(parts, m.content);
 }
 	return length(parts) ? join_parts(parts) : null;
-}
+};
 
 
 
@@ -375,7 +375,7 @@ for (let __i10 = 0; __i10 < length(__arr10); __i10++) {
 		return { error: 'AI 调用异常: ' + e };
 	}
 }
-export function call_ai(cfg, messages, tools, extra_system) {
+export const call_ai = function(cfg, messages, tools, extra_system) {
 	if (!cfg.api_key || !length(cfg.api_key))
 		return { error: '未配置 API Key，请在设置页填写并保存' };
 	if (!cfg.model || !length(cfg.model))
@@ -436,13 +436,13 @@ export function call_ai(cfg, messages, tools, extra_system) {
 	}
 
 	return last;
-}
+};
 
 
 
 // ---------------------------------------------------------------- context summarization
 
-export function summarize_messages(cfg, messages) {
+export const summarize_messages = function(cfg, messages) {
 	// messages: internal text messages to compress (user/assistant kind=text)
 	let sys = '你是 OpenWrt 配置调优助手。请把以下对话压缩为不超过 150 字的中文摘要，必须保留：' +
 		'讨论过的配置项与数值、已执行的命令与结果、已确定的方案、待办事项、用户偏好与约束。' +
@@ -462,4 +462,4 @@ for (let __i11 = 0; __i11 < length(__arr11); __i11++) {
 		return { ok: false, error: resp.error };
 
 	return { ok: true, summary: (resp.text || '').trim() };
-}
+};

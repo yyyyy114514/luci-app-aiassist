@@ -16,7 +16,7 @@ import { tools_for_permission, call_ai, summarize_messages } from 'aiassist.prot
 
 // ---------------------------------------------------------------- system prompt
 
-export function build_full_system(cfg) {
+export const build_full_system = function(cfg) {
 	let perm = {
 		readonly: '只读（readonly）：AI 只能查看配置与系统状态，不能执行任何命令，只能给出建议',
 		limited:  '受限（limited）：AI 只能执行白名单内的命令（uci 读写、服务 reload、常用诊断），危险操作被拒绝',
@@ -45,7 +45,7 @@ export function build_full_system(cfg) {
 		sys += '\n\n用户补充要求：' + trim(cfg.system_prompt);
 
 	return sys;
-}
+};
 
 // ---------------------------------------------------------------- tool dispatch
 
@@ -83,7 +83,7 @@ function dispatch_tool(name, args, ctx) {
 
 // ---------------------------------------------------------------- context compression
 
-export function compress_session(sid) {
+export const compress_session = function(sid) {
 	let s = read_session(sid);
 	if (!s)
 		return { ok: false, changed: false, reason: '会话不存在' };
@@ -149,7 +149,7 @@ for (let __i2 = 0; __i2 < length(__arr2); __i2++) {
 	write_session(s);
 
 	return { ok: true, changed: true, removed_turns: target, estimated: estimate_session_tokens(s) };
-}
+};
 
 function auto_compress(sid, cfg) {
 	let guard = 0;
@@ -176,10 +176,10 @@ function estimate_tokens(text) {
 	let other = length(text) - cjk;
 	return int(cjk * 1.5 + other / 4 + 0.999);
 }
-export function is_job_stopped(id) {
+export const is_job_stopped = function(id) {
 	return access('/etc/aiassist/jobs/' + id + '.stop');
-}
-export function run_ai_loop(cfg, sid, content, jobid) {
+};
+export const run_ai_loop = function(cfg, sid, content, jobid) {
 	let s = read_session(sid);
 	if (!s)
 		return { error: '会话不存在' };
@@ -275,7 +275,7 @@ for (let __i3 = 0; __i3 < length(__arr3); __i3++) {
 	}
 
 	return { reply: final_text, tools: executed, rounds: loop };
-}
+};
 
 
 
@@ -285,7 +285,7 @@ function job_path(id) {
 	return '/etc/aiassist/jobs/' + id + '.json';
 }
 
-export function read_job(id) {
+export const read_job = function(id) {
 	try {
 		let raw = readfile(job_path(id));
 		if (raw) {
@@ -296,20 +296,20 @@ export function read_job(id) {
 	}
 	catch (e) {}
 	return null;
-}
+};
 
-export function write_job(j) {
+export const write_job = function(j) {
 	writefile(job_path(j.id), sprintf('%J', j));
-}
+};
 
 
 
-export function stop_job(id) {
+export const stop_job = function(id) {
 	writefile('/etc/aiassist/jobs/' + id + '.stop', time() + '\n');
 	return { ok: true };
-}
+};
 
-export function lock_session(sid) {
+export const lock_session = function(sid) {
 	let lockdir = '/etc/aiassist/locks/' + sid;
 	let lockfile = lockdir + '/lock';
 	try {
@@ -331,14 +331,14 @@ export function lock_session(sid) {
 		catch (e2) {}
 		return false; // still locked
 	}
-}
+};
 
-export function unlock_session(sid) {
+export const unlock_session = function(sid) {
 	popen('rmdir /etc/aiassist/locks/' + sid + ' 2>/dev/null');
-}
+};
 
 // lazily remove stale job files (done/error > 1h, stuck queued > 5min)
-export function cleanup_jobs() {
+export const cleanup_jobs = function() {
 	try {
 		for (let f in lsdir('/etc/aiassist/jobs')) {
 			if (substr(f, -5) != '.json')
@@ -358,9 +358,9 @@ export function cleanup_jobs() {
 		}
 	}
 	catch (e) {}
-}
+};
 
-export function submit_job(sid, content, type) {
+export const submit_job = function(sid, content, type) {
 	let s = read_session(sid);
 	if (!s)
 		return { error: '会话不存在' };
@@ -381,15 +381,15 @@ export function submit_job(sid, content, type) {
 	popen(sprintf('nohup %s %s %s >/dev/null 2>&1 &', worker, shellquote(sid), shellquote(jobid)));
 
 	return { job: jobid };
-}
+};
 
-export function poll_job(id) {
+export const poll_job = function(id) {
 	return read_job(id);
-}
+};
 
 // ---------------------------------------------------------------- main worker entry
 
-export function run_job(job) {
+export const run_job = function(job) {
 	let cfg = load_config();
 	if (!cfg.enabled)
 		return { error: 'AI 助手未启用，请在设置页开启' };
@@ -402,4 +402,4 @@ export function run_job(job) {
 	}
 
 	return run_ai_loop(cfg, sid, job.content, job.id);
-}
+};

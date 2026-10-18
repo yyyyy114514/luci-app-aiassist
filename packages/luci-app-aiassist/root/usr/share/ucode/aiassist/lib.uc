@@ -18,9 +18,9 @@ const MTD_DIR     = DATA_DIR + '/mtd';
 const UNDO_DIR    = DATA_DIR + '/undo';
 const KEY_FILE    = DATA_DIR + '/api_key';
 
-export function key_file_path() {
+export const key_file_path = function() {
 	return KEY_FILE;
-}
+};
 const AUDIT_FILE  = DATA_DIR + '/audit.log';
 
 const MAX_COMMAND_LEN   = 2048;
@@ -66,33 +66,33 @@ const LIMITED_OPERATORS = /[;&|`]|\$\(|\n|\b(rm|reboot|poweroff|halt|mkfs|dd|sh|
 
 // ---------------------------------------------------------------- small utilities
 
-export function shellquote(s) {
+export const shellquote = function(s) {
 	return "'" + replace(s, "'", "'\\''") + "'";
-}
+};
 
-export function join(parts, sep) {
+export const join = function(parts, sep) {
 	let out = '';
 	for (let i = 0; i < length(parts); i++)
 		out += (i ? sep : '') + parts[i];
 	return out;
-}
+};
 
-export function trunc(text, max) {
+export const trunc = function(text, max) {
 	if (text == null)
 		return '';
 	text = '' + text;
 	if (length(text) <= max)
 		return text;
 	return substr(text, 0, max) + '\n...[output truncated at ' + max + ' bytes]';
-}
+};
 
 function now() {
 	return time();
 }
 
-export function randstr(prefix) {
+export const randstr = function(prefix) {
 	return sprintf('%s_%d_%d', prefix, time(), clock());
-}
+};
 
 function audit(msg) {
 	try {
@@ -124,7 +124,7 @@ function remove_key(obj, key) {
 
 // ---------------------------------------------------------------- configuration
 
-export function load_config() {
+export const load_config = function() {
 	const defs = {
 		enabled: '0', provider: 'openai', base_url: 'https://api.openai.com/v1', model: 'gpt-4o-mini',
 		permission: 'readonly', full_risk_acknowledged: '0', context_threshold: '6000', max_turns: '20',
@@ -192,22 +192,22 @@ export function load_config() {
 	}
 
 	return cfg;
-}
+};
 
-export function api_key_status(cfg) {
+export const api_key_status = function(cfg) {
 	return {
 		configured: length(cfg.api_key) > 0,
 		hint: length(cfg.api_key) > 0 ? substr(cfg.api_key, 0, 8) + '...' : ''
 	};
-}
+};
 
 // ---------------------------------------------------------------- sessions
 
-export function session_path(sid) {
+export const session_path = function(sid) {
 	return SESS_DIR + '/' + sid + '.json';
-}
+};
 
-export function read_session(sid) {
+export const read_session = function(sid) {
 	try {
 		let raw = readfile(session_path(sid));
 		if (raw) {
@@ -218,14 +218,14 @@ export function read_session(sid) {
 	}
 	catch (e) {}
 	return null;
-}
+};
 
-export function write_session(s) {
+export const write_session = function(s) {
 	// ucode's json() only parses; serialize with sprintf("%J", ...)
 	writefile(session_path(s.id), sprintf('%J', s));
-}
+};
 
-export function list_sessions() {
+export const list_sessions = function() {
 	let out = [];
 	try {
 		for (let f in lsdir(SESS_DIR))
@@ -239,12 +239,12 @@ export function list_sessions() {
 	catch (e) {}
 	sort(out, function(a, b) { return b.updated - a.updated; });
 	return out;
-}
-export function delete_session(sid) {
+};
+export const delete_session = function(sid) {
 	unlink(session_path(sid));
 	popen('rm -rf ' + shellquote(SNAP_DIR + '/' + sid) + ' 2>/dev/null');
 	return { ok: true };
-}
+};
 function prune_sessions() {
 	try {
 		let cfg = load_config();
@@ -257,7 +257,7 @@ function prune_sessions() {
 	}
 	catch (e) {}
 }
-export function create_session(title) {
+export const create_session = function(title) {
 	let sid = randstr('s');
 	let s = {
 		id: sid,
@@ -269,7 +269,7 @@ export function create_session(title) {
 	// enforce session retention: drop the oldest sessions beyond the limit
 	prune_sessions();
 	return s;
-}
+};
 
 
 
@@ -277,7 +277,7 @@ export function create_session(title) {
 
 
 
-export function rename_session(sid, title) {
+export const rename_session = function(sid, title) {
 	let s = read_session(sid);
 	if (!s)
 		return { ok: false, reason: '会话不存在' };
@@ -285,7 +285,7 @@ export function rename_session(sid, title) {
 	s.updated = now();
 	write_session(s);
 	return { ok: true };
-}
+};
 
 // ---------------------------------------------------------------- token estimation
 
@@ -301,7 +301,7 @@ function estimate_tokens(text) {
 	return int(cjk * 1.5 + other / 4 + 0.999);
 }
 
-export function estimate_session_tokens(s) {
+export const estimate_session_tokens = function(s) {
 	let total = 0;
 	let __arr0 = s.messages;
 for (let __i0 = 0; __i0 < length(__arr0); __i0++) {
@@ -310,7 +310,7 @@ for (let __i0 = 0; __i0 < length(__arr0); __i0++) {
 }
 
 	return total;
-}
+};
 
 // ---------------------------------------------------------------- snapshots & rollback
 
@@ -346,7 +346,7 @@ function prune_snapshots(sid, s) {
 	}
 	catch (e) {}
 }
-export function create_snapshot(sid, label) {
+export const create_snapshot = function(sid, label) {
 	let s = read_session(sid);
 	if (!s)
 		return { ok: false, text: '会话不存在' };
@@ -377,12 +377,12 @@ export function create_snapshot(sid, label) {
 	catch (e) {
 		return { ok: false, text: '快照创建失败: ' + e };
 	}
-}
+};
 
 // keep at most `snapshot_retention` snapshots per session (oldest dropped)
 
 
-export function list_snapshots(sid) {
+export const list_snapshots = function(sid) {
 	let s = read_session(sid);
 	if (!s)
 		return { ok: true, snapshots: [] };
@@ -432,7 +432,7 @@ for (let __i13 = 0; __i13 < length(__arr13); __i13++) {
 		}
 	sort(out, function(a, b) { return a.turn - b.turn; });
 	return { ok: true, snapshots: out };
-}
+};
 
 // compare the uci state frozen in a snapshot against the current live uci state
 function run_diff(diffbin, new_text, old_text) {
@@ -444,7 +444,7 @@ function run_diff(diffbin, new_text, old_text) {
 	popen('rm -f ' + shellquote(f1) + ' ' + shellquote(f2));
 	return { ok: true, text: out || '（无差异）' };
 }
-export function snapshot_diff(sid, turn) {
+export const snapshot_diff = function(sid, turn) {
 	let s = read_session(sid);
 	if (!s || !s.snapshots || !s.snapshots[turn])
 		return { ok: false, text: '快照不存在' };
@@ -488,11 +488,11 @@ for (let __i4 = 0; __i4 < length(__arr4); __i4++) {
 			push(out, '- ' + l);
 }
 	return { ok: true, text: join(out, '\n') || '（无差异）' };
-}
+};
 
 
 
-export function get_snapshot_content(sid, turn) {
+export const get_snapshot_content = function(sid, turn) {
 	let s = read_session(sid);
 	if (!s || !s.snapshots || !s.snapshots[turn])
 		return { ok: false, text: '快照不存在' };
@@ -500,9 +500,9 @@ export function get_snapshot_content(sid, turn) {
 	let arch_uci = SNAP_DIR + '/' + sid + '/' + (sn.uci || '');
 	let content = readfile(arch_uci) || '（快照中无 uci 存档）';
 	return { ok: true, text: content };
-}
+};
 
-export function rollback_session(sid, turn, confirm) {
+export const rollback_session = function(sid, turn, confirm) {
 	if (confirm != 'yes')
 		return { ok: false, text: '回滚需要确认参数 confirm=yes（防止误操作）' };
 
@@ -567,11 +567,11 @@ for (let __i5 = 0; __i5 < length(__arr5); __i5++) {
 	catch (e) {
 		return { ok: false, text: '回滚失败: ' + e };
 	}
-}
+};
 
 // ---------------------------------------------------------------- mtd backup
 
-export function list_mtd() {
+export const list_mtd = function() {
 	try {
 		let out = [];
 		let lines = split(trim(readfile('/proc/mtd') || ''), /\n/);
@@ -585,7 +585,7 @@ export function list_mtd() {
 	catch (e) {
 		return { ok: false, text: '读取 /proc/mtd 失败: ' + e };
 	}
-}
+};
 
 // available free space (KB) on the filesystem hosting `path`
 function avail_kb(path) {
@@ -608,7 +608,7 @@ function overlay_info() {
 //   device='full' -> every partition including firmware/rootfs/ubi whole-disk images
 // Overlay-resize note: mtd images are physical partition snapshots; restoring them does not
 // bring back a later overlay resize - use the config archive for day-to-day config recovery.
-export function backup_mtd(device) {
+export const backup_mtd = function(device) {
 	let lm = list_mtd();
 	if (!lm.ok)
 		return lm;
@@ -738,11 +738,11 @@ for (let __i9 = 0; __i9 < length(__arr9); __i9++) {
 	catch (e) {
 		return { ok: false, text: 'MTD 备份失败: ' + e };
 	}
-}
+};
 
 // ---------------------------------------------------------------- permission & exec
 
-export function check_exec(permission, command, cfg) {
+export const check_exec = function(permission, command, cfg) {
 	if (!command || !length(trim(command)))
 		return { ok: false, reason: '空命令' };
 
@@ -778,7 +778,7 @@ for (let __i11 = 0; __i11 < length(__arr11); __i11++) {
 }
 
 	return { ok: false, reason: '命令不在受限模式白名单（可在设置页 exec_allowlist 添加前缀，或切换到 full 权限）' };
-}
+};
 
 function run_shell(command, timeout_sec) {
 	let out = randstr('/tmp/aiassist_exec');
@@ -795,7 +795,7 @@ function run_shell(command, timeout_sec) {
 	}
 }
 
-export function exec_command(cfg, command, sid, permission) {
+export const exec_command = function(cfg, command, sid, permission) {
 	let check = check_exec(permission, command, cfg);
 	if (!check.ok) {
 		audit(sprintf('exec DENIED session=%s perm=%s cmd=%s', sid, permission, substr(command, 0, 200)));
@@ -810,7 +810,7 @@ export function exec_command(cfg, command, sid, permission) {
 	let out = trunc(r.output, cfg.max_output);
 	audit(sprintf('exec session=%s perm=%s rc=%s to=%ds cmd=%s', sid, permission, r.code, to, substr(command, 0, 500)));
 	return { ok: true, code: r.code, text: sprintf('命令已执行（exit=%s）：\n%s', r.code, out) };
-}
+};
 
 // ---------------------------------------------------------------- view / system info
 
@@ -834,7 +834,7 @@ for (let __i12 = 0; __i12 < length(__arr12); __i12++) {
 	return false;
 }
 
-export function view_config(cfg, target) {
+export const view_config = function(cfg, target) {
 	if (!target || target == 'all') {
 		let r = run_shell('uci show 2>/dev/null', 10);
 		return { ok: true, text: trunc(r.output, MAX_VIEW_LEN) };
@@ -853,9 +853,9 @@ export function view_config(cfg, target) {
 	}
 
 	return { ok: false, text: '无效的查看目标（使用 all / UCI 包名 / 绝对路径）' };
-}
+};
 
-export function get_system_info() {
+export const get_system_info = function() {
 	let parts = [];
 
 	let rel = readfile('/etc/openwrt_release') || readfile('/etc/openwrt_version') || 'unknown';
@@ -912,12 +912,12 @@ export function get_system_info() {
 		push(parts, '== Thermal ==\n' + join(temps, '  '));
 
 	return { ok: true, text: join(parts, '\n\n') };
-}
+};
 
-export function get_log(lines) {
+export const get_log = function(lines) {
 	lines = int(lines) || 100;
 	if (lines < 1) lines = 1;
 	if (lines > 500) lines = 500;
 	let r = run_shell('logread -l ' + lines + ' 2>/dev/null', 10);
 	return { ok: true, text: trunc(r.output, MAX_VIEW_LEN) };
-}
+};
