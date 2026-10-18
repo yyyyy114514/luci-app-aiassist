@@ -99,16 +99,16 @@ jobs:
             echo "ucode version:"; ucode -V 2>/dev/null || strings /usr/bin/ucode | grep -m1 '2025' || true
             echo "== probe: which module export forms does 24.10 ucode accept? =="
             mkdir -p /usr/share/ucode/probe
-            printf 'export function f() { return 1; }\n' > /usr/share/ucode/probe/t1.uc
-            printf 'export const f = function() { return 2; };\n' > /usr/share/ucode/probe/t2.uc
-            printf 'const x = 5;\nexport function f() { return x; }\n' > /usr/share/ucode/probe/t3.uc
-            printf 'function f() { return 4; }\nexport { f };\n' > /usr/share/ucode/probe/t4.uc
-            printf 'function f() { return 5; }\n' > /usr/share/ucode/probe/t5.uc
+            printf "export function f() { return 1; }\n" > /usr/share/ucode/probe/t1.uc
+            printf "export const f = function() { return 2; };\n" > /usr/share/ucode/probe/t2.uc
+            printf "const x = 5;\nexport function f() { return x; }\n" > /usr/share/ucode/probe/t3.uc
+            printf "function f() { return 4; }\nexport { f };\n" > /usr/share/ucode/probe/t4.uc
+            printf "function f() { return 5; }\n" > /usr/share/ucode/probe/t5.uc
             for t in t1 t2 t3 t4 t5; do
-              if ucode -e "import * as m from 'probe.$t'; print('$t OK: ' + m.f() + '\\n')" 2>/tmp/err.txt; then
+              if ucode -e "import * as m from 'probe.$t'; print('$t import OK keys=' + keys(m) + '\\n')" 2>/tmp/err.txt; then
                 echo "PROBE $t: PASS"
               else
-                echo "PROBE $t: FAIL -> $(head -1 /tmp/err.txt)"
+                echo "PROBE $t: FAIL -> $(head -2 /tmp/err.txt | tail -1)"
               fi
             done
             mkdir -p /usr/share/ucode/aiassist /usr/share/rpcd/ucode /usr/libexec/aiassist
