@@ -52,6 +52,12 @@ jobs:
             echo "== rpcd entry + worker (standalone scripts, no exports) =="
             ucode -c /usr/share/rpcd/ucode/aiassist && echo "rpcd entry: compile OK"
             ucode -c /usr/libexec/aiassist/worker.uc && echo "worker.uc: compile OK"
+            # Execute the rpcd entry exactly like rpcd does: the script top-level
+            # returns { aiassist: methods } and rpcd registers those ubus objects.
+            # Actually running it (not just -c) proves the full import chain and
+            # the returned signature object are valid at runtime.
+            echo "== rpcd entry: execute (load as rpcd does) =="
+            ucode -e "let f = loadfile(\"/usr/share/rpcd/ucode/aiassist\"); let sig = f(); print(\"entry executed, keys: \" + keys(sig) + \"\\n\"); if (!sig.aiassist) { print(\"ERROR: no aiassist object in returned signature\\n\"); exit(1); } print(\"entry signature OK\\n\")"
             echo "== import smoke test =="
             ucode -e "import * as l from \"aiassist.lib\"; import * as p from \"aiassist.proto\"; import * as c from \"aiassist.core\"; print(\"imports OK\\n\")"
             echo "== runtime smoke: load_config + token estimate =="
