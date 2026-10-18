@@ -64,6 +64,7 @@
 | **`json()` 不能序列化** | `writefile(path, json(obj))` | `Type error: Input object does not implement read() method`——ucode 的 `json()` 只做**解析**（字符串/资源→值） | 序列化用 **`sprintf('%J', obj)`**（官方 netifd 用法） |
 | **无 `float()` / `double()` 全局** | `float(x)` / `double(x)` | `Reference error: access to undeclared variable float`——core 71 函数表无此函数 | 数值强制转换用一元 `+`：`let t = +cfg.temperature;`（`int(x, base)` 是唯一字符串→整数函数） |
 | **无 `rand()` 全局** | `rand() % 100` | `Reference error: access to undeclared variable rand`——随机数在 math 模块（`import ... from 'math'`），且部分 rootfs 没带 math.so | 用 `clock()`（纳秒单调时钟，core 函数）生成唯一后缀：`sprintf('%s_%d_%d', prefix, time(), clock())` |
+| **`undefined` 不是变量** | `x === undefined` / `x !== undefined` | **`Reference error: access to undeclared variable undefined`**（ucode 2025.07.18 没有 `undefined` 关键字/全局）。最致命的是：如果它出现在 `catch` 的错误处理函数里，**错误处理器自身崩溃**，前端只能看到 `[object Object]` 或 `-32000`，真实原因被完全掩盖 | 一律用松散比较 **`x == null` / `x != null`**（同时覆盖 null 与"键不存在"）。`tests/scan_ucode.py` 已内置该检测（会先剥离注释，避免注释文字误报） |
 
 **嵌套循环变量名唯一性坑**：把 `for...of` 机械转成 `let __arr = ...; for(let __i=...)` 时，如果多次迭代转换，编号可能撞车导致内外层变量互相覆盖、运行期逻辑错乱。本项目 `tests/fix_forof.py` 已处理（编号取文件内已存在最大值 +1），**手写新循环时务必用全文件唯一的 `__arrN`/`__iN`**。
 

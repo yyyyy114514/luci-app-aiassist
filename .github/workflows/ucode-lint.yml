@@ -153,5 +153,8 @@ jobs:
             echo "== updateSettings on a wiped config (must self-heal) =="
             rm -f /etc/config/aiassist
             ucode -e "let f = loadfile(\"/usr/share/rpcd/ucode/aiassist\"); let s = f(); let r = s.aiassist.updateSettings.call({ args: { permission: \"readonly\", enabled: false, provider: \"openai\", base_url: \"https://x/v1\", model: \"m\" } }); print(sprintf(\"%J\", r) + \"\n\"); if (!r.ok) { print(\"ERROR: updateSettings could not recreate config\n\"); exit(1); } print(\"self-heal OK\n\")"
-            cat /etc/config/aiassist
+            echo "--- resulting config ---"
+            cat /etc/config/aiassist 2>/dev/null || echo "(no config file)"
+            grep -q "option permission" /etc/config/aiassist || { echo "ERROR: settings were not persisted to disk"; exit 1; }
+            echo "persisted OK"
           '

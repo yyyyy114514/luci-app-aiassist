@@ -6,7 +6,7 @@
 
 'use strict';
 
-import { writefile, popen } from 'fs';
+import { access, writefile, popen } from 'fs';
 import { cursor } from 'uci';
 import {
 	load_config, api_key_status,
@@ -316,9 +316,27 @@ const methods = {
 			catch (e) {
 				return { ok: false, error: '读取配置失败: ' + estr(e) };
 			}
-			// A missing /etc/config/aiassist (or a config that lost its 'settings'
-			// section during an upgrade) makes every set() throw "Entry not found".
-			// Re-create the section so saving always works instead of failing.
+			// A missing /etc/config/aiassist would make load() a no-op; add()/save()
+			// then only touch memory and the commit silently writes nothing, so the
+			// RPC would report success while the settings were never persisted.
+			// Materialise the file first, then load it normally.
+			if (!access('/etc/config/aiassist')) {
+				try {
+					writefile('/etc/config/aiassist',
+						"config aiassist 'settings'\n");
+				}
+				catch (e) {
+					return { ok: false, error: '无法创建 /etc/config/aiassist: ' + estr(e) };
+				}
+			}
+			try {
+				ctx.load('aiassist');
+			}
+			catch (e) {
+				return { ok: false, error: '读取配置失败: ' + estr(e) };
+			}
+			// A config that lost its 'settings' section during an upgrade makes every
+			// set() throw "Entry not found".
 			try {
 				if (!ctx.get('aiassist', 'settings'))
 					ctx.add('aiassist', 'settings');
@@ -376,6 +394,14 @@ const methods = {
 				ctx.commit('aiassist');
 				if (length(failed))
 					return { ok: false, error: '部分选项写入失败: ' + sprintf('%J', failed) };
+
+				// Verify the write really landed. Without this a silent no-op save
+				// would be reported as success while nothing changed on disk.
+				let rb = cursor();
+				rb.load('aiassist');
+				if (rb.get('aiassist', 'settings', 'permission') == null)
+					return { ok: false, error: '设置未写入磁盘（请检查 /etc/config/aiassist 权限或 overlay 是否可写）' };
+
 				return { ok: true };
 			}
 			catch (e) {
