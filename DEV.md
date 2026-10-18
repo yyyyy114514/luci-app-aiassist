@@ -17,16 +17,20 @@
 
 | 项 | 值 | 备注 |
 |---|---|---|
-| 当前版本 | `PKG_VERSION:=1.1.2`（`packages/luci-app-aiassist/Makefile`） | ipk 文件名版本号来自这里，**不来自 git tag** |
-| 已发布 tag | `v1.1.0` / `v1.1.1` / `v1.1.2` | 都存在于 GitHub |
-| `v1.1.2` Release | 已发布，4 架构 ipk 齐全 | 本体 `luci-app-aiassist_1.1.2-r1_all.ipk` |
-| 最近提交 | `713a16a fix: function definitions - ucode has NO hoisting` | master 领先 v1.1.2 tag 若干 commit（见下） |
+| 当前版本 | `PKG_VERSION:=1.1.6`（`packages/luci-app-aiassist/Makefile`） | ipk 文件名版本号来自这里，**不来自 git tag** |
+| 已发布 tag | `v1.1.0` … `v1.1.6` | 都存在于 GitHub |
+| `v1.1.6` Release | 已发布，4 架构 ipk 齐全，CI 全绿 | 本体 `luci-app-aiassist_1.1.6-r1_all.ipk`（32→35 KB，多了诊断脚本） |
+| 最近提交 | `a7fd5a9 fix(ucode): import access(); materialise missing config file; verify the write landed` | tag `v1.1.6` 与 master 同步 |
 
 **v1.1.0 → v1.1.2 之间修过的真问题（历史，避免重复踩）：**
 - `v1.1.1`：用户装完报 "Object not found"。根因是 **ipk 版本号来自 `PKG_VERSION` 而非 git tag**，打 tag 时忘了同步 Makefile，导致产物名仍 `1.1.0-r1`。已修正，**发版 = 改 PKG_VERSION + 打 tag 两步缺一不可**（见第 6 节）。
 - `v1.1.2`：**真机 rpcd 完全加载不了插件**，所有 ubus 调用都 `-32000 Object not found`。根因是源码用了 ucode 不支持的 JS 语法（见第 2 节）。v1.1.2 已把全部源码重写为 ucode 兼容写法。
 
-> ⚠️ **重要**：v1.1.2 之后（master 未发版的 commit）又通过真机 lint 修掉了 **6 个运行时级 bug**（node 语法检查永远抓不到，必须真机执行才能暴露）——**这批修复尚未随 v1.1.2 发布**，发版前必须把 master 的 ucode-lint 修复一起带上（见第 6 节"发版流程"补充）。
+**v1.1.3 → v1.1.6 的关键修复：**
+- `v1.1.3/1.1.4`：ucode 2025.07.18 不支持 `export function f(){}`，45 处改 `export const f = function(){}`；新增 `ucode-2410` CI job 复现用户真机环境。
+- `v1.1.5`：`updateSettings` 补 `cursor().load()`（不 load 就 `set()` 会 `Entry not found`）。
+- `v1.1.6`：**真因** —— `undefined` 在 ucode 里不是变量，`x === undefined` 抛 `Reference error: access to undeclared variable undefined`。它既让每次保存都在写入前抛错，又让新加的错误处理器自己崩溃，于是前端只剩 `[object Object]`。同轮还修了 `access()` 漏 import、config 缺失时 `load()` 为 no-op 导致"假成功"。详见第 2.1 节表格。
+- `v1.1.6` 新增可观测性：`selfTest` RPC、设置页「运行诊断」按钮、`/usr/sbin/aiassist-diag`、前端 `errText()` 兜底。**任何异常都不会再以 `[object Object]` 或裸 `-32000` 出现。**
 
 **CI 状态（2026-10-17 已全绿 ✅）：**
 - ✅ `ucode-lint`（独立 reusable workflow，见 `.github/workflows/ucode-lint.yml`）：真机 ucode 编译 + import + runtime smoke，**作为 build 的前置门禁**（`build needs: ucode-lint`，lint 不过编译不启动）。
