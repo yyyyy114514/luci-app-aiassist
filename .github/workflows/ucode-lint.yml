@@ -87,7 +87,9 @@ jobs:
             VER=2025.07.18~3f64c808-r1
             cd /tmp
             for p in "ucode_${VER}_x86_64.ipk" "ucode-mod-fs_${VER}_x86_64.ipk" \
-                     "ucode-mod-uci_${VER}_x86_64.ipk" "libucode20230711_${VER}_x86_64.ipk"; do
+                     "ucode-mod-uci_${VER}_x86_64.ipk" "libucode20230711_${VER}_x86_64.ipk" \
+                     "libubox20240329_2025.07.23~49056d17-r1_x86_64.ipk" \
+                     "libuci20250120_2025.01.20~16ff0bad-r1_x86_64.ipk"; do
               echo "downloading $p"
               wget -q "$BASE/$p" -O pkg.ipk
               tar xzf pkg.ipk
@@ -96,7 +98,8 @@ jobs:
             cp -f /tmp/usr/bin/ucode /usr/bin/ucode
             cp -f /tmp/usr/lib/libucode.so.20230711 /usr/lib/libucode.so.20230711
             cp -f /tmp/usr/lib/ucode/fs.so /tmp/usr/lib/ucode/uci.so /usr/lib/ucode/
-            echo "ucode version:"; ucode -V 2>/dev/null || strings /usr/bin/ucode | grep -m1 "2025" || true
+            cp -f /tmp/usr/lib/libubox.so.20240329 /tmp/usr/lib/libuci.so.20250120 /usr/lib/
+            echo "ucode libs:"; ls /usr/lib/ucode/ /usr/lib/libucode* /usr/lib/libubox* /usr/lib/libuci* 2>/dev/null
             echo "== probe: which module export forms does 24.10 ucode accept? =="
             mkdir -p /usr/share/ucode/probe
             printf "export function f() { return 1; }\n" > /usr/share/ucode/probe/t1.uc
