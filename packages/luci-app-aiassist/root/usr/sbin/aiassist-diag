@@ -1,0 +1,74 @@
+#!/bin/sh
+# aiassist-diag - one-shot diagnostic for luci-app-aiassist
+#
+# Prints every precondition the rpcd plugin depends on, so a failed install can
+# be identified from a single command instead of a generic RPC -32000 error.
+#
+# Usage: aiassist-diag
+
+echo "=================== system ==================="
+[ -f /etc/openwrt_release ] && . /etc/openwrt_release
+echo "distro      : ${DISTRIB_DESCRIPTION:-unknown}"
+echo "ucode       : $(ucode --version 2>&1 | head -n1)"
+echo "rpcd        : $(opkg list-installed 2>/dev/null | grep -E '^rpcd ' | head -n1)"
+echo "rpcd-mod    : $(opkg list-installed 2>/dev/null | grep -E '^rpcd-mod-ucode ' | head -n1)"
+echo "aiassist    : $(opkg list-installed 2>/dev/null | grep -E '^luci-app-aiassist ' | head -n1)"
+
+echo
+echo "=================== files ===================="
+for f in \
+	/usr/share/rpcd/ucode/aiassist \
+	/usr/share/ucode/aiassist/lib.uc \
+	/usr/share/ucode/aiassist/proto.uc \
+	/usr/share/ucode/aiassist/core.uc \
+	/etc/config/aiassist \
+	/etc/aiassist \
+	/www/luci-static/resources/view/aiassist/settings.js
+do
+	if [ -e "$f" ]; then
+		ls -ld "$f"
+	else
+		echo "MISSING     $f"
+	fi
+done
+
+echo
+echo "============ ubus object registered =========="
+if ubus list 2>/dev/null | grep -qx aiassist; then
+	echo "aiassist: REGISTERED"
+	ubus -v list aiassist 2>&1 | head -n 40
+else
+	echo "aiassist: NOT REGISTERED  <-- rpcd did not load the plugin"
+fi
+
+echo
+echo "=========== module compile (ucode) ==========="
+for m in aiassist.lib aiassist.proto aiassist.core; do
+	if ucode -e "import * as m from \"$m\"; print(\"$m : OK\\n\")" 2>&1; then
+		:
+	fi
+done
+
+echo
+echo "============= rpcd entry checks =============="
+if ucode -c /usr/share/rpcd/ucode/aiassist 2>&1; then
+	echo "entry compile : OK"
+else
+	echo "entry compile : FAILED (this is the root cause)"
+fi
+
+ucode -e 'let f = loadfile("/usr/share/rpcd/ucode/aiassist"); let s = f(); if (s && s.aiassist) { print("entry execute : OK, methods = " + length(keys(s.aiassist)) + "\n"); } else { print("entry execute : FAILED, returned " + s + "\n"); }' 2>&1
+
+echo
+echo "============== live RPC calls ================"
+echo "--- getSettings ---"
+ubus call aiassist getSettings 2>&1 | head -n 20
+echo "--- selfTest ---"
+ubus call aiassist selfTest 2>&1 | head -n 40
+
+echo
+echo "================ rpcd log ===================="
+logread 2>/dev/null | grep -i -E 'rpcd|aiassist' | tail -n 20
+
+echo
+echo "=================== done ====================="

@@ -6,6 +6,7 @@
 				"aiassist": [
 					"getInfo",
 					"getSettings",
+					"selfTest",
 					"listSessions",
 					"getSession",
 					"pollJob",

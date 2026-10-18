@@ -19,6 +19,46 @@ import { call_ai } from 'aiassist.proto';
 
 // ------------------------------------------------ helpers
 
+// Render any thrown value as a plain string. rpcd/ubus would otherwise turn an
+// uncaught object into "-32000: Object not found" or a bare `[object Object]`
+// in the LuCI frontend, which is exactly the failure mode we must never show.
+function estr(e) {
+	if (e === null || e === undefined)
+		return 'unknown error';
+	if (type(e) == 'string')
+		return e;
+	if (type(e) == 'object' || type(e) == 'array') {
+		try {
+			let j = sprintf('%J', e);
+			if (j && j != 'null' && j != '{}')
+				return j;
+		}
+		catch (x) { }
+	}
+	try {
+		return '' + e;
+	}
+	catch (x) {
+		return 'unprintable error';
+	}
+}
+
+// Every RPC method is wrapped so an internal exception becomes a normal reply
+// ({ ok: false, error: "<string>" }) instead of an rpcd-level failure.
+function safe(fn, name) {
+	return function(request) {
+		try {
+			let r = fn(request);
+			if (r === null || r === undefined)
+				return { ok: false, error: name + ': empty result' };
+			return r;
+		}
+		catch (e) {
+			return { ok: false, error: name + ': ' + estr(e) };
+		}
+	};
+}
+
 function clean_settings(cfg) {
 	let out = {
 		enabled: cfg.enabled,
@@ -271,9 +311,29 @@ const methods = {
 				ctx.load('aiassist');
 			}
 			catch (e) {
-				return { ok: false, error: '读取配置失败: ' + e };
+				return { ok: false, error: '读取配置失败: ' + estr(e) };
 			}
-			let set = function(k, v) { if (a[k] !== null && a[k] !== undefined) ctx.set('aiassist', 'settings', k, '' + v); };
+			// A missing /etc/config/aiassist (or a config that lost its 'settings'
+			// section during an upgrade) makes every set() throw "Entry not found".
+			// Re-create the section so saving always works instead of failing.
+			try {
+				if (!ctx.get('aiassist', 'settings'))
+					ctx.add('aiassist', 'settings');
+			}
+			catch (e) {
+				return { ok: false, error: '配置缺少 settings 段且无法创建: ' + estr(e) };
+			}
+			let failed = [];
+			let set = function(k, v) {
+				if (a[k] === null || a[k] === undefined)
+					return;
+				try {
+					ctx.set('aiassist', 'settings', k, '' + v);
+				}
+				catch (e) {
+					push(failed, k + '=' + estr(e));
+				}
+			};
 
 			try {
 				if (a.permission == 'full') {
@@ -311,10 +371,12 @@ const methods = {
 
 				ctx.save('aiassist');
 				ctx.commit('aiassist');
+				if (length(failed))
+					return { ok: false, error: '部分选项写入失败: ' + sprintf('%J', failed) };
 				return { ok: true };
 			}
 			catch (e) {
-				return { ok: false, error: '保存设置失败: ' + e };
+				return { ok: false, error: '保存设置失败: ' + estr(e) };
 			}
 		}
 	},
@@ -335,7 +397,91 @@ const methods = {
 			writefile(key_file_path(), '');
 			return { ok: true };
 		}
+	},
+
+	// Diagnostic endpoint: reports every environmental precondition the plugin
+	// depends on, so a broken install can be identified in one click instead of
+	// guessing from a generic "-32000: Object not found".
+	selfTest: {
+		call: function() {
+			let out = [];
+			let add = function(item, ok, detail) {
+				push(out, { item: item, ok: ok ? true : false, detail: '' + detail });
+			};
+
+			try {
+				let has_file = access('/etc/config/aiassist');
+				add('配置文件 /etc/config/aiassist', has_file ? true : false,
+					has_file ? '存在' : '缺失');
+				let ctx = cursor();
+				let ld = ctx.load('aiassist');
+				add('uci load(aiassist)', ld === false ? false : true, 'load() = ' + sprintf('%J', ld));
+				let sec = ctx.get('aiassist', 'settings');
+				add('uci 段 settings', sec ? true : false,
+					sec ? '存在' : '缺失（保存时会自动创建）');
+			}
+			catch (e) {
+				add('uci', false, estr(e));
+			}
+
+			try {
+				let okd = access('/etc/aiassist');
+				add('数据目录 /etc/aiassist', okd ? true : false,
+					okd ? '存在' : '缺失（执行 /etc/uci-defaults/aiassist 可修复）');
+			}
+			catch (e) {
+				add('数据目录', false, estr(e));
+			}
+
+			try {
+				let cfg = load_config();
+				add('load_config()', true,
+					'permission=' + cfg.permission + ' provider=' + cfg.provider +
+					' enabled=' + cfg.enabled + ' model=' + cfg.model);
+			}
+			catch (e) {
+				add('load_config()', false, estr(e));
+			}
+
+			try {
+				add('api key 状态', true, api_key_status(load_config()));
+			}
+			catch (e) {
+				add('api key 状态', false, estr(e));
+			}
+
+			try {
+				let p = popen('command -v curl 2>/dev/null');
+				let txt = p ? trim(p.read('all') || '') : '';
+				if (p) p.close();
+				add('curl 可执行文件', length(txt) ? true : false, length(txt) ? txt : '缺失');
+			}
+			catch (e) {
+				add('curl 可执行文件', false, estr(e));
+			}
+
+			return { ok: true, checks: out };
+		}
 	}
 };
+
+// Wrap every method so an internal exception is returned as a normal reply
+// ({ ok: false, error: "<string>" }) instead of escaping to rpcd, where it would
+// surface in the LuCI frontend as "-32000: Object not found" / "[object Object]".
+// The names are listed explicitly (instead of for-in) to stay within the subset
+// of ucode syntax that both 24.10 and master accept.
+let wrap_names = [
+	'getInfo', 'getSettings', 'selfTest', 'listSessions', 'getSession', 'createSession',
+	'deleteSession', 'renameSession', 'sendMessage', 'compressContext', 'pollJob', 'stopJob',
+	'getSystemInfo', 'listSnapshots', 'snapshotDiff', 'getSnapshot', 'createSnapshot',
+	'rollback', 'listMtd', 'backupMtd', 'testConnection', 'updateSettings', 'setApiKey',
+	'clearApiKey'
+];
+
+for (let i = 0; i < length(wrap_names); i++) {
+	let n = wrap_names[i];
+	if (methods[n] && methods[n].call)
+		methods[n].call = safe(methods[n].call, n);
+}
 
 return { aiassist: methods };

@@ -132,4 +132,12 @@ jobs:
             mkdir -p /etc/aiassist/sessions
             printf "config aiassist settings\\n\\toption enabled 1\\n" > /etc/config/aiassist
             ucode -e "import { load_config, estimate_session_tokens, create_session } from \"aiassist.lib\"; let cfg = load_config(); print(\"enabled=\" + cfg.enabled + \"\\n\"); let s = create_session(\"ci-smoke\"); print(\"session=\" + s.id + \" tokens=\" + estimate_session_tokens(s) + \"\\n\"); print(\"runtime OK\\n\")"
+            echo "== selfTest RPC (exercises the exception guard) =="
+            ucode -e "let f = loadfile(\"/usr/share/rpcd/ucode/aiassist\"); let s = f(); print(\"method count = \" + length(keys(s.aiassist)) + \"\n\"); let r = s.aiassist.selfTest.call({ args: {} }); print(sprintf(\"%J\", r) + \"\n\"); if (!r.checks) { print(\"ERROR: selfTest returned no checks\n\"); exit(1); } print(\"selfTest OK\n\")"
+            echo "== updateSettings RPC (real uci write path) =="
+            ucode -e "let f = loadfile(\"/usr/share/rpcd/ucode/aiassist\"); let s = f(); let r = s.aiassist.updateSettings.call({ args: { permission: \"readonly\", enabled: false, provider: \"openai\", base_url: \"https://x/v1\", model: \"m\", context_threshold: 6000, max_turns: 20, timeout: 60, max_output: 4096, temperature: 0.3, proxy: \"\", auto_snapshot: true, mtd_backup: false, system_prompt: \"\", exec_allowlist: \"\", view_paths: \"\", acknowledge_full: false, max_tokens: 2048, max_tool_rounds: 6, exec_timeout: 30, max_session_tokens: 20000, api_retries: 2 } }); print(sprintf(\"%J\", r) + \"\n\"); if (!r.ok) { print(\"ERROR: updateSettings failed\n\"); exit(1); } print(\"updateSettings OK\n\")"
+            echo "== updateSettings on a wiped config (must self-heal) =="
+            rm -f /etc/config/aiassist
+            ucode -e "let f = loadfile(\"/usr/share/rpcd/ucode/aiassist\"); let s = f(); let r = s.aiassist.updateSettings.call({ args: { permission: \"readonly\", enabled: false, provider: \"openai\", base_url: \"https://x/v1\", model: \"m\" } }); print(sprintf(\"%J\", r) + \"\n\"); if (!r.ok) { print(\"ERROR: updateSettings could not recreate config\n\"); exit(1); } print(\"self-heal OK\n\")"
+            cat /etc/config/aiassist
           '

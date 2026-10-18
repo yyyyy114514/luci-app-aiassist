@@ -3,8 +3,37 @@
 'require rpc';
 'require ui';
 
+// Turn absolutely anything thrown by the RPC layer into a readable string.
+// Without this, an error object without a string .message renders as
+// "[object Object]" in the LuCI notification, hiding the real cause.
+function errText(e) {
+	if (e === null || e === undefined)
+		return '未知错误（无错误对象）';
+	if (typeof e === 'string')
+		return e;
+	if (typeof e.message === 'string' && e.message.length)
+		return e.message;
+	if (typeof e.error === 'string' && e.error.length)
+		return e.error;
+	if (e.error !== null && e.error !== undefined && typeof e.error === 'object')
+		return errText(e.error);
+	try {
+		let s = JSON.stringify(e);
+		if (s && s !== '{}' && s !== 'null')
+			return s;
+	}
+	catch (x) { }
+	try {
+		return String(e);
+	}
+	catch (x) {
+		return '不可打印的错误对象';
+	}
+}
+
 const api = {
 	getSettings:  rpc.declare({ object: 'aiassist', method: 'getSettings', expect: {} }),
+	selfTest:     rpc.declare({ object: 'aiassist', method: 'selfTest', expect: {} }),
 	updateSettings: rpc.declare({
 		object: 'aiassist', method: 'updateSettings',
 		params: [ 'enabled', 'provider', 'base_url', 'model', 'permission', 'context_threshold',
@@ -26,7 +55,24 @@ const PERMS = [
 
 return view.extend({
 	render: async function() {
-		this.cfg = await api.getSettings();
+		try {
+			this.cfg = await api.getSettings();
+		}
+		catch (e) {
+			this.cfg = { __load_error: errText(e) };
+		}
+
+		if (this.cfg && this.cfg.__load_error === undefined && this.cfg.ok === false && this.cfg.error)
+			this.cfg = { __load_error: errText(this.cfg.error) };
+
+		if (this.cfg && this.cfg.__load_error !== undefined)
+			return this.errorPage(this.cfg.__load_error);
+
+		if (!this.cfg || typeof this.cfg != 'object')
+			this.cfg = {};
+
+		if (!this.cfg.api_key || typeof this.cfg.api_key != 'object')
+			this.cfg.api_key = { configured: false, hint: '' };
 
 		let rows = [];
 
@@ -140,6 +186,8 @@ return view.extend({
 			'空格分隔的绝对路径/目录，AI 可通过 view_config 读取这些文件。用于支持第三方插件配置的查看，如 /tmp/myapp.conf。', this.f_view));
 
 		let btn = E('button', { class: 'cbi-button cbi-button-action', click: () => this.save() }, '保存设置');
+		let diagBtn = E('button', { class: 'cbi-button', style: 'margin-left:8px', click: () => this.diag() }, '运行诊断');
+		this.diagBox = E('div', { style: 'margin-top:10px;display:none' });
 
 		return E('div', { class: 'cbi-section' }, [
 			E('h2', {}, 'AI Assistant 设置'),
@@ -147,8 +195,59 @@ return view.extend({
 				'配置 AI 服务商、权限模式与回滚选项。AI 由你自主配置，密钥仅保存在本机。'),
 			E('div', { style: 'max-width:760px' }, rows),
 			this.warnBox,
-			E('div', { style: 'margin-top:14px' }, btn)
+			E('div', { style: 'margin-top:14px' }, [btn, diagBtn]),
+			this.diagBox
 		]);
+	},
+
+	errorPage: function(msg) {
+		this.diagBox = E('div', { style: 'margin-top:10px' });
+		return E('div', { class: 'cbi-section' }, [
+			E('h2', {}, 'AI Assistant 设置'),
+			E('div', { class: 'alert-message warning', style: 'padding:10px;border:1px solid #e0c060;background:#fdf6d8;color:#6b5200' },
+				'无法与后端（ubus 对象 aiassist）通信：' + msg),
+			E('div', { class: 'cbi-section-descr', style: 'margin-top:8px' },
+				'这通常表示 rpcd 没有加载本插件的 ucode 入口，或文件权限异常。点击下方按钮查看逐项检查结果，' +
+				'若无法连接后端，请在 SSH 中执行：ubus list | grep aiassist ; logread | grep -i rpcd | tail -20'),
+			E('div', { style: 'margin-top:10px' },
+				E('button', { class: 'cbi-button cbi-button-action', click: () => this.diag() }, '运行诊断')),
+			this.diagBox
+		]);
+	},
+
+	diag: async function() {
+		let box = this.diagBox;
+		if (!box)
+			return;
+		box.style.display = 'block';
+		box.innerHTML = '';
+		box.appendChild(E('div', { style: 'color:#666' }, '正在检查…'));
+
+		let r;
+		try {
+			r = await api.selfTest();
+		}
+		catch (e) {
+			box.innerHTML = '';
+			box.appendChild(E('div', { style: 'color:#a00;white-space:pre-wrap' },
+				'诊断调用失败（说明后端未就绪）：' + errText(e)));
+			return;
+		}
+
+		box.innerHTML = '';
+		if (!r || !r.checks) {
+			box.appendChild(E('div', { style: 'color:#a00;white-space:pre-wrap' },
+				'诊断无返回：' + errText(r)));
+			return;
+		}
+
+		let list = E('div', { style: 'border:1px solid #ddd;border-radius:4px;padding:8px;font-size:12px;font-family:monospace;white-space:pre-wrap' });
+		for (let i = 0; i < r.checks.length; i++) {
+			let c = r.checks[i];
+			list.appendChild(E('div', { style: 'margin:2px 0;color:' + (c.ok ? '#2a7a2a' : '#a00') },
+				(c.ok ? '[ OK ] ' : '[FAIL] ') + c.item + ' — ' + c.detail));
+		}
+		box.appendChild(list);
 	},
 
 	row: function(label, desc, control) {
@@ -170,9 +269,13 @@ return view.extend({
 
 	collect: function() {
 		let perm = '';
-		for (let r of this.permRadios)
-			if (r.querySelector('input').checked)
-				perm = r.querySelector('input').value;
+		for (let i = 0; i < this.permRadios.length; i++) {
+			let inp = this.permRadios[i].querySelector('input');
+			if (inp && inp.checked)
+				perm = inp.value;
+		}
+		if (!perm)
+			perm = this.cfg.permission || 'readonly';
 
 		return {
 			enabled: this.f_enabled.checked,
@@ -201,7 +304,15 @@ return view.extend({
 	},
 
 	save: async function() {
-		let d = this.collect();
+		let d;
+		try {
+			d = this.collect();
+		}
+		catch (e) {
+			ui.addNotification({ title: 'AI Assistant', text: '读取表单失败: ' + errText(e), type: 'error' });
+			return;
+		}
+
 		if (d.permission == 'full' && !d.acknowledge_full && !this.cfg.full_risk_acknowledged) {
 			ui.addNotification({ title: 'AI Assistant', text: '切换到 full（全权负责）必须先勾选「我已知晓 full 权限风险」', type: 'error' });
 			return;
@@ -216,13 +327,24 @@ return view.extend({
 			);
 		}
 		catch (err) {
-			ui.addNotification({ title: 'AI Assistant', text: '保存设置失败（RPC 错误）: ' + (err && err.message ? err.message : err), type: 'error' });
+			ui.addNotification({
+				title: 'AI Assistant',
+				text: '保存设置失败（RPC 错误）: ' + errText(err) + '\n（可点击「运行诊断」查看后端状态）',
+				type: 'error'
+			});
 			return;
 		}
-		if (r && r.ok)
+		if (r && r.ok) {
+			this.cfg = Object.assign({}, this.cfg, d);
 			ui.addNotification({ title: 'AI Assistant', text: '设置已保存', type: 'info' });
-		else
-			ui.addNotification({ title: 'AI Assistant', text: (r && r.error && typeof r.error == 'string') ? r.error : '保存失败（未知错误）', type: 'error' });
+		}
+		else {
+			ui.addNotification({
+				title: 'AI Assistant',
+				text: '保存失败：' + errText(r && r.error !== undefined ? r.error : r),
+				type: 'error'
+			});
+		}
 	},
 
 	saveKey: async function() {
@@ -236,7 +358,7 @@ return view.extend({
 			r = await api.setApiKey(k);
 		}
 		catch (err) {
-			ui.addNotification({ title: 'AI Assistant', text: '保存 Key 失败（RPC 错误）: ' + (err && err.message ? err.message : err), type: 'error' });
+			ui.addNotification({ title: 'AI Assistant', text: '保存 Key 失败（RPC 错误）: ' + errText(err), type: 'error' });
 			return;
 		}
 		if (r && r.ok) {
@@ -244,7 +366,7 @@ return view.extend({
 			ui.addNotification({ title: 'AI Assistant', text: 'API Key 已保存', type: 'info' });
 		}
 		else
-			ui.addNotification({ title: 'AI Assistant', text: (r && r.error && typeof r.error == 'string') ? r.error : '保存失败（未知错误）', type: 'error' });
+			ui.addNotification({ title: 'AI Assistant', text: errText(r && r.error !== undefined ? r.error : r), type: 'error' });
 	},
 
 	clearKey: async function() {
@@ -255,7 +377,7 @@ return view.extend({
 			r = await api.clearApiKey();
 		}
 		catch (err) {
-			ui.addNotification({ title: 'AI Assistant', text: '清空 Key 失败（RPC 错误）: ' + (err && err.message ? err.message : err), type: 'error' });
+			ui.addNotification({ title: 'AI Assistant', text: '清空 Key 失败（RPC 错误）: ' + errText(err), type: 'error' });
 			return;
 		}
 		if (r && r.ok)
@@ -269,12 +391,12 @@ return view.extend({
 			r = await api.testConnection();
 		}
 		catch (err) {
-			ui.addNotification({ title: 'AI Assistant', text: '连接测试失败（RPC 错误）: ' + (err && err.message ? err.message : err), type: 'error' });
+			ui.addNotification({ title: 'AI Assistant', text: '连接测试失败（RPC 错误）: ' + errText(err), type: 'error' });
 			return;
 		}
 		if (r && r.ok)
 			ui.addNotification({ title: 'AI Assistant', text: '连接成功：' + (r.reply || ''), type: 'info' });
 		else
-			ui.addNotification({ title: 'AI Assistant', text: (r && r.error && typeof r.error == 'string') ? r.error : '连接失败（未知错误）', type: 'error' });
+			ui.addNotification({ title: 'AI Assistant', text: errText(r && r.error !== undefined ? r.error : r), type: 'error' });
 	}
 });
