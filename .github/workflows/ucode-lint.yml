@@ -98,8 +98,9 @@ jobs:
             cp -f /tmp/usr/bin/ucode /usr/bin/ucode
             cp -f /tmp/usr/lib/libucode.so.20230711 /usr/lib/libucode.so.20230711
             cp -f /tmp/usr/lib/ucode/fs.so /tmp/usr/lib/ucode/uci.so /usr/lib/ucode/
-            cp -f /tmp/usr/lib/libubox.so.20240329 /tmp/usr/lib/libuci.so.20250120 /usr/lib/
-            echo "ucode libs:"; ls /usr/lib/ucode/ /usr/lib/libucode* /usr/lib/libubox* /usr/lib/libuci* 2>/dev/null
+            # libubox/libuci ship under ./lib (not ./usr/lib) inside their ipk
+            cp -f /tmp/lib/libubox.so.20240329 /tmp/lib/libuci.so.20250120 /lib/
+            echo "installed libs:"; ls /lib/libubox.so.20240329 /lib/libuci.so.20250120 /usr/lib/ucode/ 2>/dev/null
             echo "== probe: which module export forms does 24.10 ucode accept? =="
             mkdir -p /usr/share/ucode/probe
             printf "export function f() { return 1; }\n" > /usr/share/ucode/probe/t1.uc
