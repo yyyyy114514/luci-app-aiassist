@@ -67,7 +67,7 @@ const LIMITED_OPERATORS = /[;&|`]|\$\(|\n|\b(rm|reboot|poweroff|halt|mkfs|dd|sh|
 // ---------------------------------------------------------------- small utilities
 
 export function shellquote(s) {
-	return `'${replace(s, "'", "'\\''")}'`;
+	return "'" + replace(s, "'", "'\\''") + "'";
 }
 
 export function join(parts, sep) {
@@ -237,7 +237,7 @@ export function list_sessions() {
 			}
 	}
 	catch (e) {}
-	sort(out, (a, b) => b.updated - a.updated);
+	sort(out, function(a, b) { return b.updated - a.updated; });
 	return out;
 }
 export function delete_session(sid) {
@@ -332,7 +332,7 @@ function prune_snapshots(sid, s) {
 		let snap_keys = keys(s.snapshots || {});
 		if (length(snap_keys) <= keep)
 			return;
-		sort(snap_keys, (a, b) => int(a) - int(b));
+		sort(snap_keys, function(a, b) { return int(a) - int(b); });
 		let drop = length(snap_keys) - keep;
 		for (let i = 0; i < drop; i++) {
 			let t = snap_keys[i];
@@ -430,7 +430,7 @@ for (let __i13 = 0; __i13 < length(__arr13); __i13++) {
 				actions: turn_summary[t] || []
 			});
 		}
-	sort(out, (a, b) => a.turn - b.turn);
+	sort(out, function(a, b) { return a.turn - b.turn; });
 	return { ok: true, snapshots: out };
 }
 

@@ -265,7 +265,7 @@ const methods = {
 		call: function(request) {
 			let a = request.args;
 			let ctx = cursor();
-			let set = (k, v) => { if (a[k] !== null && a[k] !== undefined) ctx.set('aiassist', 'settings', k, '' + v); };
+			let set = function(k, v) { if (a[k] !== null && a[k] !== undefined) ctx.set('aiassist', 'settings', k, '' + v); };
 
 			if (a.permission == 'full') {
 				let cfg = load_config();

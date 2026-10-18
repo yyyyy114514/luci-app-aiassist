@@ -285,7 +285,7 @@ for (let __i13 = 0; __i13 < length(__arr13); __i13++) {
 // ---------------------------------------------------------------- core API call
 
 function parse_openai(data) {
-	let choice = data?.choices?.[0];
+	let choice = (data && data.choices) ? data.choices[0] : null;
 	if (!choice)
 		return { error: 'API 响应缺少 choices 字段' };
 
@@ -362,7 +362,7 @@ for (let __i10 = 0; __i10 < length(__arr10); __i10++) {
 			return { error: 'API 响应不是有效 JSON（可能被网关/代理拦截）' };
 		}
 
-		if (data?.error) {
+		if (data && data.error) {
 			let m = data.error.message || data.error.type || '未知错误';
 			return { error: 'API 返回错误: ' + m };
 		}
