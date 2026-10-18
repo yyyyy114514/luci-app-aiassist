@@ -23,7 +23,10 @@ import { call_ai } from 'aiassist.proto';
 // uncaught object into "-32000: Object not found" or a bare `[object Object]`
 // in the LuCI frontend, which is exactly the failure mode we must never show.
 function estr(e) {
-	if (e === null || e === undefined)
+	// NOTE: `undefined` is NOT a declared variable in ucode 2025.07.18 - touching it
+	// raises "Reference error: access to undeclared variable undefined" and would
+	// crash the error handler itself. Loose == null covers both null and missing.
+	if (e == null)
 		return 'unknown error';
 	if (type(e) == 'string')
 		return e;
@@ -49,7 +52,7 @@ function safe(fn, name) {
 	return function(request) {
 		try {
 			let r = fn(request);
-			if (r === null || r === undefined)
+			if (r == null)
 				return { ok: false, error: name + ': empty result' };
 			return r;
 		}
@@ -325,7 +328,7 @@ const methods = {
 			}
 			let failed = [];
 			let set = function(k, v) {
-				if (a[k] === null || a[k] === undefined)
+				if (a[k] == null)
 					return;
 				try {
 					ctx.set('aiassist', 'settings', k, '' + v);

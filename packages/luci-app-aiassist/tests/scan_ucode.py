@@ -16,10 +16,37 @@ PATTERNS = [
     ("method-style .join(", r'\.join\s*\('),
     ("method-style .slice(", r'\.slice\s*\('),
     ("destructuring assignment", r'^\s*(?:let|const|var)?\s*\{[^}]*\}\s*=\s*[^=]|^\s*(?:let|const|var)?\s*\[[^\]]*\]\s*=\s*[^=]', re.M),
+    # `undefined` is NOT a declared variable in ucode 2025.07.18 (24.10 line).
+    # Referencing it throws "Reference error: access to undeclared variable
+    # undefined", which can crash an error handler and surface as an opaque
+    # RPC failure. Use `== null` instead.
+    ("undefined identifier (use == null)", r"(?<![\w.$])\bundefined\b"),
 ]
 
+def strip_comments(txt):
+    out, in_block = [], False
+    for line in txt.split("\n"):
+        if in_block:
+            if "*/" in line:
+                line = line.split("*/", 1)[1]
+                in_block = False
+            else:
+                out.append("")
+                continue
+        if "/*" in line:
+            head, rest = line.split("/*", 1)
+            if "*/" in rest:
+                line = head + rest.split("*/", 1)[1]
+            else:
+                line = head
+                in_block = True
+        line = re.sub(r'(^|[^:"\\])//.*$', r'\1', line)
+        out.append(line)
+    return "\n".join(out)
+
+
 def scan(path):
-    txt = open(path, encoding="utf-8").read()
+    txt = strip_comments(open(path, encoding="utf-8").read())
     hits = []
     for item in PATTERNS:
         name, pat, *extra = item

@@ -25,6 +25,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Static guard - ucode-incompatible syntax
+        run: |
+          python3 packages/luci-app-aiassist/tests/scan_ucode.py \
+            packages/luci-app-aiassist/root/usr/share/rpcd/ucode/aiassist \
+            packages/luci-app-aiassist/root/usr/share/ucode/aiassist/*.uc \
+            packages/luci-app-aiassist/root/usr/libexec/aiassist/worker.uc
+
       - name: Compile & smoke-test with real OpenWrt ucode
         run: |
           # ghcr.io/openwrt/rootfs:x86_64-master is the real OpenWrt userspace
@@ -75,6 +82,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Static guard - ucode-incompatible syntax
+        run: |
+          python3 packages/luci-app-aiassist/tests/scan_ucode.py \
+            packages/luci-app-aiassist/root/usr/share/rpcd/ucode/aiassist \
+            packages/luci-app-aiassist/root/usr/share/ucode/aiassist/*.uc \
+            packages/luci-app-aiassist/root/usr/libexec/aiassist/worker.uc
 
       - name: Compile with ucode from ImmortalWrt 24.10.6 (2025.07.18)
         run: |
