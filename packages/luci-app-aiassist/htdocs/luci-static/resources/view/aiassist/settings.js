@@ -206,16 +206,23 @@ return view.extend({
 			ui.addNotification({ title: 'AI Assistant', text: '切换到 full（全权负责）必须先勾选「我已知晓 full 权限风险」', type: 'error' });
 			return;
 		}
-		let r = await api.updateSettings(
-			d.enabled, d.provider, d.base_url, d.model, d.permission, d.context_threshold,
-			d.max_turns, d.timeout, d.max_output, d.temperature, d.proxy, d.auto_snapshot, d.mtd_backup,
-			d.system_prompt, d.exec_allowlist, d.view_paths, d.acknowledge_full,
-			d.max_tokens, d.max_tool_rounds, d.exec_timeout, d.max_session_tokens, d.api_retries
-		);
+		let r;
+		try {
+			r = await api.updateSettings(
+				d.enabled, d.provider, d.base_url, d.model, d.permission, d.context_threshold,
+				d.max_turns, d.timeout, d.max_output, d.temperature, d.proxy, d.auto_snapshot, d.mtd_backup,
+				d.system_prompt, d.exec_allowlist, d.view_paths, d.acknowledge_full,
+				d.max_tokens, d.max_tool_rounds, d.exec_timeout, d.max_session_tokens, d.api_retries
+			);
+		}
+		catch (err) {
+			ui.addNotification({ title: 'AI Assistant', text: '保存设置失败（RPC 错误）: ' + (err && err.message ? err.message : err), type: 'error' });
+			return;
+		}
 		if (r && r.ok)
 			ui.addNotification({ title: 'AI Assistant', text: '设置已保存', type: 'info' });
 		else
-			ui.addNotification({ title: 'AI Assistant', text: (r && r.error) || '保存失败', type: 'error' });
+			ui.addNotification({ title: 'AI Assistant', text: (r && r.error && typeof r.error == 'string') ? r.error : '保存失败（未知错误）', type: 'error' });
 	},
 
 	saveKey: async function() {
@@ -224,29 +231,50 @@ return view.extend({
 			ui.addNotification({ title: 'AI Assistant', text: '请输入 API Key', type: 'error' });
 			return;
 		}
-		let r = await api.setApiKey(k);
+		let r;
+		try {
+			r = await api.setApiKey(k);
+		}
+		catch (err) {
+			ui.addNotification({ title: 'AI Assistant', text: '保存 Key 失败（RPC 错误）: ' + (err && err.message ? err.message : err), type: 'error' });
+			return;
+		}
 		if (r && r.ok) {
 			this.f_key.value = '';
 			ui.addNotification({ title: 'AI Assistant', text: 'API Key 已保存', type: 'info' });
 		}
 		else
-			ui.addNotification({ title: 'AI Assistant', text: (r && r.error) || '保存失败', type: 'error' });
+			ui.addNotification({ title: 'AI Assistant', text: (r && r.error && typeof r.error == 'string') ? r.error : '保存失败（未知错误）', type: 'error' });
 	},
 
 	clearKey: async function() {
 		if (!confirm('确定清空已保存的 API Key？'))
 			return;
-		let r = await api.clearApiKey();
+		let r;
+		try {
+			r = await api.clearApiKey();
+		}
+		catch (err) {
+			ui.addNotification({ title: 'AI Assistant', text: '清空 Key 失败（RPC 错误）: ' + (err && err.message ? err.message : err), type: 'error' });
+			return;
+		}
 		if (r && r.ok)
 			ui.addNotification({ title: 'AI Assistant', text: 'API Key 已清空', type: 'info' });
 	},
 
 	testConn: async function() {
 		ui.addNotification({ title: 'AI Assistant', text: '正在测试连接…', type: 'info' });
-		let r = await api.testConnection();
+		let r;
+		try {
+			r = await api.testConnection();
+		}
+		catch (err) {
+			ui.addNotification({ title: 'AI Assistant', text: '连接测试失败（RPC 错误）: ' + (err && err.message ? err.message : err), type: 'error' });
+			return;
+		}
 		if (r && r.ok)
 			ui.addNotification({ title: 'AI Assistant', text: '连接成功：' + (r.reply || ''), type: 'info' });
 		else
-			ui.addNotification({ title: 'AI Assistant', text: (r && r.error) || '连接失败', type: 'error' });
+			ui.addNotification({ title: 'AI Assistant', text: (r && r.error && typeof r.error == 'string') ? r.error : '连接失败（未知错误）', type: 'error' });
 	}
 });

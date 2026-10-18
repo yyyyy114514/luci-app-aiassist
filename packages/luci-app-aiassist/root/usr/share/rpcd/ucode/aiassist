@@ -265,43 +265,57 @@ const methods = {
 		call: function(request) {
 			let a = request.args;
 			let ctx = cursor();
+			// ucode uci cursor only operates on the in-memory state of configs
+			// that have been load()ed; set() without load() throws "Entry not found"
+			try {
+				ctx.load('aiassist');
+			}
+			catch (e) {
+				return { ok: false, error: '读取配置失败: ' + e };
+			}
 			let set = function(k, v) { if (a[k] !== null && a[k] !== undefined) ctx.set('aiassist', 'settings', k, '' + v); };
 
-			if (a.permission == 'full') {
-				let cfg = load_config();
-				let ack = cfg.full_risk_acknowledged || a.acknowledge_full === true;
-				if (!ack)
-					return { ok: false, error: '切换到 full（全权负责）权限必须先确认风险（勾选确认框）' };
-				ctx.set('aiassist', 'settings', 'full_risk_acknowledged', '1');
-				ctx.set('aiassist', 'settings', 'permission', 'full');
-			}
-			else {
-				ctx.set('aiassist', 'settings', 'permission', a.permission || 'readonly');
-			}
+			try {
+				if (a.permission == 'full') {
+					let cfg = load_config();
+					let ack = cfg.full_risk_acknowledged || a.acknowledge_full === true;
+					if (!ack)
+						return { ok: false, error: '切换到 full（全权负责）权限必须先确认风险（勾选确认框）' };
+					ctx.set('aiassist', 'settings', 'full_risk_acknowledged', '1');
+					ctx.set('aiassist', 'settings', 'permission', 'full');
+				}
+				else {
+					ctx.set('aiassist', 'settings', 'permission', a.permission || 'readonly');
+				}
 
-			set('enabled', a.enabled);
-			set('provider', a.provider);
-			set('base_url', a.base_url);
-			set('model', a.model);
-			set('context_threshold', a.context_threshold);
-			set('max_turns', a.max_turns);
-			set('timeout', a.timeout);
-			set('max_output', a.max_output);
-			set('temperature', a.temperature);
-			set('proxy', a.proxy);
-			set('auto_snapshot', a.auto_snapshot);
-			set('mtd_backup', a.mtd_backup);
-			set('system_prompt', a.system_prompt);
-			set('exec_allowlist', a.exec_allowlist);
-			set('view_paths', a.view_paths);
-			set('max_tokens', a.max_tokens);
-			set('max_tool_rounds', a.max_tool_rounds);
-			set('exec_timeout', a.exec_timeout);
-			set('max_session_tokens', a.max_session_tokens);
-			set('api_retries', a.api_retries);
+				set('enabled', a.enabled);
+				set('provider', a.provider);
+				set('base_url', a.base_url);
+				set('model', a.model);
+				set('context_threshold', a.context_threshold);
+				set('max_turns', a.max_turns);
+				set('timeout', a.timeout);
+				set('max_output', a.max_output);
+				set('temperature', a.temperature);
+				set('proxy', a.proxy);
+				set('auto_snapshot', a.auto_snapshot);
+				set('mtd_backup', a.mtd_backup);
+				set('system_prompt', a.system_prompt);
+				set('exec_allowlist', a.exec_allowlist);
+				set('view_paths', a.view_paths);
+				set('max_tokens', a.max_tokens);
+				set('max_tool_rounds', a.max_tool_rounds);
+				set('exec_timeout', a.exec_timeout);
+				set('max_session_tokens', a.max_session_tokens);
+				set('api_retries', a.api_retries);
 
-			ctx.commit('aiassist');
-			return { ok: true };
+				ctx.save('aiassist');
+				ctx.commit('aiassist');
+				return { ok: true };
+			}
+			catch (e) {
+				return { ok: false, error: '保存设置失败: ' + e };
+			}
 		}
 	},
 
