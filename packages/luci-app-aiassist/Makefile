@@ -10,7 +10,7 @@ LUCI_TITLE:=LuCI AI Assistant - chat with AI to inspect & tune OpenWrt
 LUCI_DEPENDS:=+luci-base +curl
 LUCI_PKGARCH:=all
 
-PKG_VERSION:=1.1.4
+PKG_VERSION:=1.1.5
 PKG_RELEASE:=1
 
 PKG_LICENSE:=Apache-2.0
